@@ -288,13 +288,17 @@ main() {
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Could not re-enable writes before deletion."
   PART="$(lsblk -nrpo NAME,TYPE "$DEV" | awk '$2=="part"{print $1;exit}')"
   [[ -n "$PART" && -b "$PART" ]] || die "USB partition disappeared before deletion."
-  capture S11_DELETE_SYNTHETIC_FILES bash -Eeuo pipefail -c '
+  ACTIVE_MOUNT="$mount_dir"
+  capture S11_DELETE_SYNTHETIC_FILES sudo bash -Eeuo pipefail -c '
     part="$1"; mount_dir="$2"
     mount "$part" "$mount_dir"
+    trap '\''sync; umount "$mount_dir" >/dev/null 2>&1 || true'\'' EXIT
     rm -- "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt"
     sync
     umount "$mount_dir"
+    trap - EXIT
   ' _ "$PART" "$mount_dir"
+  ACTIVE_MOUNT=""
   capture S12_REENABLE_READ_ONLY sudo blockdev --setro "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "USB could not be set read-only after deletion."
   acquire_image "02_after_deletion"
