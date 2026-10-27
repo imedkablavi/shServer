@@ -1,0 +1,16 @@
+services:
+  forensic-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: usb-forensics-tools:local
+    network_mode: none
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m
+    volumes:
+      - ${CASE_DIR:-./case-001}:/case:rw
