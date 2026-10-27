@@ -81,16 +81,24 @@ capture() {
     printf 'Step: %s\nUTC: %s\nHost: %s\nCase: %s\nCommand:' "$label" "$(date -u --iso-8601=seconds)" "$(hostname)" "$CASE_DIR"
     printf ' %q' "$@"
     printf '\n\n--- OUTPUT ---\n'
-  } > "$log_file"
-  if "$@" >> "$log_file" 2>&1; then
-    rc=0
+  } | tee "$log_file"
+  # Keep shell functions in the current shell (they set workflow state); pipe external commands to tee for live progress.
+  if declare -F -- "$1" >/dev/null 2>&1; then
+    if "$@" >> "$log_file" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
   else
-    rc=$?
+    if "$@" 2>&1 | tee -a "$log_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
   fi
   {
     printf '\n--- END OF OUTPUT ---\nExit code: %s\nUTC end: %s\n' "$rc" "$(date -u --iso-8601=seconds)"
-  } >> "$log_file"
-  cat "$log_file"
+  } | tee -a "$log_file"
   if ! "$TERM_SHOT" --raw-read "$log_file" --filename "$png_file" --columns 120; then
     log "WARNING: PNG creation failed for $label. Text log retained."
   elif [[ -s "$png_file" ]]; then
