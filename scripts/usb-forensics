@@ -359,6 +359,7 @@ main() {
   "$TERM_SHOT" --raw-read "$preclean_log" --filename "$SHOT_DIR/${RUN_ID}_precondition_wipe.png" --columns 120 || die "Could not render the precondition wipe log."
   local device_bytes
   device_bytes="$(sudo blockdev --getsize64 "$DEV")"
+  log "Verifying all $device_bytes logical bytes before creating a fresh filesystem; this full-device scan can take time."
   capture S03B_VERIFY_PRECONDITION_ZERO sudo cmp -n "$device_bytes" "$DEV" /dev/zero
   capture S03C_SYNC_AFTER_PRECONDITION sudo sync
   capture S04_WIPEFS sudo wipefs --all "$DEV"
