@@ -18,6 +18,7 @@ REPORT_DIR="$CASE_DIR/report"
 TOOLS_IMAGE="${TOOLS_IMAGE:-usb-forensics-tools:local}"
 DEV=""
 PART=""
+ACTIVE_MOUNT=""
 START_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 die() { printf 'FATAL: %s\n' "$*" >&2; exit 1; }
@@ -44,6 +45,19 @@ mkdir -p "$RUN_DIR"
 exec 9>"$RUN_DIR/workflow.lock"
 flock -n 9 || die "Another workflow appears to be running."
 exec > >(tee -a "$RUN_DIR/workflow-console.txt") 2>&1
+
+cleanup_on_exit() {
+  local rc=$?
+  trap - EXIT
+  if [[ -n "${ACTIVE_MOUNT:-}" ]] && mountpoint -q "$ACTIVE_MOUNT"; then
+    sudo umount "$ACTIVE_MOUNT" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${DEV:-}" && -b "$DEV" ]]; then
+    sudo blockdev --setro "$DEV" >/dev/null 2>&1 || true
+  fi
+  exit "$rc"
+}
+trap cleanup_on_exit EXIT
 
 capture() {
   local label="$1"; shift
