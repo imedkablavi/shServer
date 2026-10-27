@@ -184,14 +184,14 @@ wipe_device() {
   sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Device is not writable; refusing wipe."
   need_confirmation "Final destructive action: zero all logical sectors on $DEV (serial $serial)." "WIPE-$EXPECTED_SERIAL"
-  sudo docker run --rm --network none --read-only --cap-drop ALL \
+  capture S20_WIPE_OPERATION sudo docker run --rm --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
     "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log=/evidence/logs/04_wipe_operation.log
   [[ -s "$LOG_DIR/04_wipe_operation.log" ]] || die "Wipe log is missing; do not claim success."
   sha256sum "$LOG_DIR/04_wipe_operation.log" > "$HASH_DIR/04_wipe_operation.log.sha256"
-  sudo sync
-  sudo blockdev --setro "$DEV"
+  capture S21_SYNC_AFTER_WIPE sudo sync
+  capture S22_SET_READ_ONLY_AFTER_WIPE sudo blockdev --setro "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Failed to restore read-only state after wipe."
 }
 
