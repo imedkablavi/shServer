@@ -285,8 +285,7 @@ main() {
   need_confirmation "This workflow will destroy the existing Windows installer and reinitialize the specified USB. Confirm the serial after reviewing S01." "ERASE-AND-REINITIALIZE-$EXPECTED_SERIAL"
   # Protect against system-disk aliases even if device enumeration changes during the run.
   [[ "$(readlink -f "$DEV")" == "$(readlink -f "/dev/disk/by-id/usb-Generic_Flash_Disk_${EXPECTED_SERIAL}-0:0")" ]] || die "USB identity changed immediately before reinitialization."
-  [[ "$(readlink -f "$DEV")" == "$(readlink -f "/dev/disk/by-id/usb-Generic_Flash_Disk_${EXPECTED_SERIAL}-0:0")" ]] || die "USB identity changed before initial clean."
-  sudo blockdev --setrw "$DEV"
+  capture S02_ENABLE_WRITES_BEFORE_INITIAL_CLEAN sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
   capture S03_PRECONDITION_ZERO_WIPE sudo docker run --rm --network none --read-only --cap-drop ALL \
@@ -307,16 +306,20 @@ main() {
 
   local mount_dir="$RUN_DIR/usb-mount"
   mkdir -p "$mount_dir"
-  capture S09_CREATE_SYNTHETIC_FILES bash -Eeuo pipefail -c '
+  ACTIVE_MOUNT="$mount_dir"
+  capture S09_CREATE_SYNTHETIC_FILES sudo bash -Eeuo pipefail -c '
     part="$1"; mount_dir="$2"; manifest="$3"
     mount "$part" "$mount_dir"
-    printf "Synthetic forensic test file 1\\n" > "$mount_dir/sample-01.txt"
-    printf "Synthetic forensic test file 2\\n" > "$mount_dir/sample-02.txt"
+    trap '\''sync; umount "$mount_dir" >/dev/null 2>&1 || true'\'' EXIT
+    printf "Synthetic forensic test file 1\n" > "$mount_dir/sample-01.txt"
+    printf "Synthetic forensic test file 2\n" > "$mount_dir/sample-02.txt"
     dd if=/dev/urandom of="$mount_dir/sample-03.bin" bs=4096 count=4 status=none
     sha256sum "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt" "$mount_dir/sample-03.bin" > "$manifest"
     sync
     umount "$mount_dir"
+    trap - EXIT
   ' _ "$PART" "$mount_dir" "$NOTES_DIR/synthetic-files-before-deletion.sha256"
+  ACTIVE_MOUNT=""
 
   acquire_image "01_initial"
   capture S10_ENABLE_WRITES sudo blockdev --setrw "$DEV"
