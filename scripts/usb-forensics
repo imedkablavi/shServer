@@ -155,8 +155,8 @@ acquire_image() {
   sha256sum "$output" > "$HASH_DIR/$name.sha256"
   sha256sum -c "$HASH_DIR/$name.sha256"
   sha256sum "$dc_log" > "$HASH_DIR/$name.dc3dd.log.sha256"
-  "$TERM_SHOT" --raw-read "$dc_log" --filename "$SHOT_DIR/$name-acquisition-log.png" --columns 120 || log "Could not screenshot dc3dd log."
   printf '%s\n' "$name" >> "$NOTES_DIR/acquisition-order.txt"
+  "$TERM_SHOT" --raw-read "$dc_log" --filename "$SHOT_DIR/$name-acquisition-log.png" --columns 120 || log "Could not screenshot dc3dd log."
 }
 
 verify_image_pair() {
