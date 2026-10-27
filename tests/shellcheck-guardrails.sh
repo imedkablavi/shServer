@@ -12,11 +12,11 @@ grep -q 'cmp -s' "$SCRIPT"
 grep -q 'sha256sum -c' "$SCRIPT"
 grep -q 'ERASE-AND-REINITIALIZE-' "$SCRIPT"
 grep -q 'WIPE-' "$SCRIPT"
-grep -q 'S03_WIPEFS' "$SCRIPT"
+grep -q 'S04_WIPEFS' "$SCRIPT"
 grep -q 'S11_DELETE_SYNTHETIC_FILES' "$SCRIPT"
 grep -q 'S20_WIPE_OPERATION' "$SCRIPT"
 grep -q 'TERM_SHOT' "$SCRIPT"
-grep -q 'CMD \["/bin/bash"\]' "$DOCKERFILE"
+grep -Fq 'CMD ["/bin/bash"]' "$DOCKERFILE"
 if grep -Eq 'FULL WORKFLOW COMPLETED SUCCESSFULLY|capture: command not found|fail: command not found' "$SCRIPT"; then
   echo "Known false-success pattern found." >&2
   exit 1
