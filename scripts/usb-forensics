@@ -83,13 +83,19 @@ capture() {
     printf ' %q' "$@"
     printf '\n\n--- OUTPUT ---\n'
   } | tee "$log_file"
-  # Keep shell functions in the current shell (they set workflow state); pipe external commands to tee for live progress.
+  # Keep shell functions in this shell (some set workflow state) while streaming output to the
+  # terminal and evidence log. A dedicated process-substitution tee avoids hiding interactive prompts.
   if declare -F -- "$1" >/dev/null 2>&1; then
-    if "$@" >> "$log_file" 2>&1; then
+    local capture_fd tee_pid
+    exec {capture_fd}> >(tee -a "$log_file")
+    tee_pid=$!
+    if "$@" >&"$capture_fd" 2>&1; then
       rc=0
     else
       rc=$?
     fi
+    exec {capture_fd}>&-
+    wait "$tee_pid" || true
   else
     if "$@" 2>&1 | tee -a "$log_file"; then
       rc=0
