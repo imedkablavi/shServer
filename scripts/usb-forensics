@@ -178,7 +178,7 @@ ensure_tools() {
 tool_run() {
   sudo docker run --rm --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
-    -v "$CASE_DIR:/case:rw" "$TOOLS_IMAGE" /bin/bash "$@"
+    -v "$CASE_DIR:/case:ro" "$TOOLS_IMAGE" /bin/bash "$@"
 }
 
 acquire_image() {
@@ -200,6 +200,15 @@ acquire_image() {
   capture "HASH_LOG_$name" bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$dc_log" "$HASH_DIR/$name.dc3dd.log.sha256"
   printf '%s\n' "$name" >> "$NOTES_DIR/acquisition-order.txt"
   "$TERM_SHOT" --raw-read "$dc_log" --filename "$SHOT_DIR/$name-acquisition-log.png" --columns 120 || log "Could not screenshot dc3dd log."
+}
+
+PARTITION_OFFSET=""
+get_partition_offset() {
+  local name="$1" output
+  output="$(tool_run -lc "set -o pipefail; mmls /case/images/$name.img")"
+  PARTITION_OFFSET="$(awk '$1 ~ /^[0-9]+:$/ && $2 ~ /^[0-9]+:[0-9]+$/ && $3 ~ /^[0-9]+$/ {print $3; exit}' <<< "$output")"
+  [[ "$PARTITION_OFFSET" =~ ^[0-9]+$ ]] || die "Could not determine partition start sector for $name.img."
+  printf 'Image: %s.img\nFilesystem start sector: %s\n' "$name" "$PARTITION_OFFSET"
 }
 
 verify_image_pair() {
@@ -247,6 +256,8 @@ zero_verify() {
   capture S30_ZERO_IMAGE_COMPARE cmp -n "$size" "$file" /dev/zero
   printf 'PASS: all %s logical image bytes are zero; no claim is made about hidden flash translation-layer cells.\n' "$size" > "$ANALYSIS_DIR/zero_image_verification.status"
   "$TERM_SHOT" --raw-read "$ANALYSIS_DIR/zero_image_verification.status" --filename "$SHOT_DIR/zero-image-verification.png" --columns 120 || true
+  sha256sum "$ANALYSIS_DIR/zero_image_verification.status" > "$HASH_DIR/zero_image_verification.status.sha256"
+  sha256sum "$SHOT_DIR/zero-image-verification.png" > "$HASH_DIR/zero-image-verification.png.sha256" 2>/dev/null || true
 }
 
 write_report() {
@@ -263,8 +274,28 @@ write_report() {
         printf -- '- %s: NOT CREATED\n' "$name"
       fi
     done
-    printf '\n## Validation\n\n'
-    printf 'Review original acquisition logs, image-pair comparison, and zero verification. This summary does not infer success for missing artifacts.\n'
+    printf '\n## Comparison\n\n'
+    if [[ -s "$ANALYSIS_DIR/02_after_deletion-vs-03_pre_wipe_repeat.txt" ]]; then
+      cat "$ANALYSIS_DIR/02_after_deletion-vs-03_pre_wipe_repeat.txt"
+    else
+      printf 'Image comparison not completed.\n'
+    fi
+    printf '\n## Deleted-entry analysis\n\n'
+    if [[ -s "$ANALYSIS_DIR/deleted-entries.txt" ]]; then
+      cat "$ANALYSIS_DIR/deleted-entries.txt"
+    else
+      printf 'Deleted-entry analysis not completed.\n'
+    fi
+    printf '\n## Wipe verification\n\n'
+    if [[ -s "$ANALYSIS_DIR/zero_image_verification.status" ]]; then
+      cat "$ANALYSIS_DIR/zero_image_verification.status"
+    else
+      printf 'Zero-image verification not completed.\n'
+    fi
+    printf '\n## Method notes\n\n'
+    printf 'Image 1 was acquired only after the lab medium was zero-cleaned, repartitioned, formatted, and populated with synthetic test files. It does not represent the USB installer state before preparation.\n'
+    printf 'The wipe verification covers the logical block device address space and does not prove physical NAND cells were sanitized.\n'
+    printf 'See the acquisition logs, independent image hashes, command logs, and screenshots for command-level evidence.\n'
   } > "$report"
   sha256sum "$report" > "$HASH_DIR/FINAL_REPORT_TEMPLATE.md.sha256"
   "$TERM_SHOT" --raw-read "$report" --filename "$SHOT_DIR/final-report-summary.png" --columns 120 || true
@@ -348,7 +379,15 @@ main() {
 
   capture S13_ANALYZE_INITIAL_PARTITIONS tool_run -lc 'mmls /case/images/01_initial.img'
   capture S14_ANALYZE_POST_DELETION_PARTITIONS tool_run -lc 'mmls /case/images/02_after_deletion.img'
-  capture S15_ANALYZE_DELETED_ENTRIES tool_run -lc 'fls -r -d /case/images/02_after_deletion.img'
+  capture S15_INITIAL_PARTITION_OFFSET get_partition_offset 01_initial
+  INITIAL_OFFSET="$PARTITION_OFFSET"
+  capture S16_DELETED_PARTITION_OFFSET get_partition_offset 02_after_deletion
+  DELETED_OFFSET="$PARTITION_OFFSET"
+  printf '01_initial.img=%s\n02_after_deletion.img=%s\n' "$INITIAL_OFFSET" "$DELETED_OFFSET" > "$NOTES_DIR/partition_offsets.txt"
+  capture S17_PARTITION_OFFSETS cat "$NOTES_DIR/partition_offsets.txt"
+  capture S18_INITIAL_FILE_LIST tool_run -lc "fls -r -o $INITIAL_OFFSET /case/images/01_initial.img"
+  capture S19_ANALYZE_DELETED_ENTRIES tool_run -lc "fls -r -d -o $DELETED_OFFSET /case/images/02_after_deletion.img"
+  cp "$ANALYSIS_DIR/02_after_deletion-vs-03_pre_wipe_repeat.txt" "$ANALYSIS_DIR/image-repeat-comparison.txt"
   capture S90_FINAL_IMAGE_HASHES sha256sum "$IMAGE_DIR/01_initial.img" "$IMAGE_DIR/02_after_deletion.img" "$IMAGE_DIR/03_pre_wipe_repeat.img" "$IMAGE_DIR/04_after_wipe.img"
   write_report
   capture S99_FINAL_INVENTORY find "$CASE_DIR" -maxdepth 4 -type f -printf '%p (%s bytes)\n'
