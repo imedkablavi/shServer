@@ -31,8 +31,6 @@ command -v sha256sum >/dev/null || die "sha256sum is required"
 command -v python3 >/dev/null || die "python3 is required"
 command -v flock >/dev/null || die "flock is required"
 command -v mountpoint >/dev/null || die "mountpoint is required"
-command -v parted >/dev/null || die "parted is required on the host"
-command -v mkfs.vfat >/dev/null || die "mkfs.vfat is required on the host"
 command -v termshot >/dev/null || command -v "$HOME/.local/bin/termshot" >/dev/null || die "termshot is required for screenshots"
 TERM_SHOT="$(command -v termshot || printf '%s' "$HOME/.local/bin/termshot")"
 
@@ -119,6 +117,25 @@ check_not_mounted() {
   [[ -z "$mounts" ]] || die "USB has mounted filesystems. Unmount only this USB after review: $mounts"
 }
 
+ensure_host_dependencies() {
+  local missing=()
+  command -v parted >/dev/null || missing+=(parted)
+  command -v mkfs.vfat >/dev/null || missing+=(dosfstools)
+  command -v partprobe >/dev/null || missing+=(parted)
+  command -v mount >/dev/null || missing+=(util-linux)
+  command -v udevadm >/dev/null || missing+=(udev)
+  if (("${#missing[@]}" > 0)); then
+    local packages
+    packages="$(printf '%s\\n' "${missing[@]}" | sort -u | paste -sd ' ' -)"
+    log "Missing host packages required for partitioning: $packages"
+    need_confirmation "Install missing host packages through apt before proceeding?" "INSTALL-HOST-DEPS"
+    capture S00_INSTALL_HOST_DEPENDENCIES sudo bash -Eeuo pipefail -c "apt-get update && apt-get install -y $packages"
+  fi
+  command -v parted >/dev/null || die "parted remains unavailable."
+  command -v mkfs.vfat >/dev/null || die "mkfs.vfat remains unavailable."
+  command -v partprobe >/dev/null || die "partprobe remains unavailable."
+}
+
 ensure_tools() {
   if ! sudo docker info >/dev/null 2>&1; then
     log "Docker daemon is unavailable. Starting it may also start other containers with restart policies."
@@ -161,7 +178,8 @@ acquire_image() {
 
 verify_image_pair() {
   local first="$1" second="$2"
-  cmp -s "$IMAGE_DIR/$first.img" "$IMAGE_DIR/$second.img" || die "$first and $second differ; refusing to proceed to wipe."
+  capture "CMP_$first" cmp -s "$IMAGE_DIR/$first.img" "$IMAGE_DIR/$second.img"
+  [[ -s "$IMAGE_DIR/$first.img" && -s "$IMAGE_DIR/$second.img" ]] || die "Comparison images are missing."
   local first_hash second_hash
   first_hash="$(sha256sum "$IMAGE_DIR/$first.img" | awk '{print $1}')"
   second_hash="$(sha256sum "$IMAGE_DIR/$second.img" | awk '{print $1}')"
@@ -199,7 +217,7 @@ zero_verify() {
   local file="$IMAGE_DIR/04_after_wipe.img" size
   [[ -s "$file" ]] || die "Post-wipe image missing or empty."
   size="$(stat -c%s "$file")"
-  cmp -n "$size" "$file" /dev/zero || die "Post-wipe image is not all zeros."
+  capture S30_ZERO_IMAGE_COMPARE cmp -n "$size" "$file" /dev/zero
   printf 'PASS: all %s logical image bytes are zero; no claim is made about hidden flash translation-layer cells.\n' "$size" > "$ANALYSIS_DIR/zero_image_verification.status"
   "$TERM_SHOT" --raw-read "$ANALYSIS_DIR/zero_image_verification.status" --filename "$SHOT_DIR/zero-image-verification.png" --columns 120 || true
 }
@@ -228,6 +246,7 @@ write_report() {
 main() {
   [[ -f "$PWD/Dockerfile" && -f "$PWD/docker-compose.yml" ]] || die "Run from repository root; Dockerfile and docker-compose.yml must exist."
   capture S00_HOST_AND_STORAGE bash -c 'date -u --iso-8601=seconds; hostname; uname -a; lsblk -e7 -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS; df -hT /srv/cs2ssd'
+  ensure_host_dependencies
   discover_device
   capture S01_DEVICE_IDENTITY bash -c 'udevadm info --query=property --name="$1"; lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$1"' _ "$DEV"
   check_storage
