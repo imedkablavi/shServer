@@ -285,12 +285,9 @@ main() {
   acquire_image "04_after_wipe"
   zero_verify
 
-  local analysis_rc=0
-  tool_run -lc 'mmls /case/images/01_initial.img' > "$ANALYSIS_DIR/initial-partitions.txt" 2>&1 || analysis_rc=$?
-  printf 'mmls exit code: %s\n' "$analysis_rc" >> "$ANALYSIS_DIR/initial-partitions.txt"
-  analysis_rc=0
-  tool_run -lc 'mmls /case/images/02_after_deletion.img' > "$ANALYSIS_DIR/post-deletion-partitions.txt" 2>&1 || analysis_rc=$?
-  printf 'mmls exit code: %s\n' "$analysis_rc" >> "$ANALYSIS_DIR/post-deletion-partitions.txt"
+  capture S13_ANALYZE_INITIAL_PARTITIONS tool_run -lc 'mmls /case/images/01_initial.img'
+  capture S14_ANALYZE_POST_DELETION_PARTITIONS tool_run -lc 'mmls /case/images/02_after_deletion.img'
+  capture S15_ANALYZE_DELETED_ENTRIES tool_run -lc 'fls -r -d /case/images/02_after_deletion.img'
   capture S90_FINAL_IMAGE_HASHES sha256sum "$IMAGE_DIR/01_initial.img" "$IMAGE_DIR/02_after_deletion.img" "$IMAGE_DIR/03_pre_wipe_repeat.img" "$IMAGE_DIR/04_after_wipe.img"
   write_report
   capture S99_FINAL_INVENTORY find "$CASE_DIR" -maxdepth 4 -type f -printf '%p (%s bytes)\n'
