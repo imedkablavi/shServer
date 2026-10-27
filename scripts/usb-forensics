@@ -1,0 +1,298 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+APP_VERSION="1.0.0"
+BASE_MOUNT="/srv/cs2ssd"
+CASE_DIR="${CASE_DIR:-/srv/cs2ssd/usb-forensics/case-001}"
+EXPECTED_SERIAL="${EXPECTED_SERIAL:-54BIZH6NCUSC1HIE}"
+EXPECTED_MODEL_RE="${EXPECTED_MODEL_RE:-Flash Disk}"
+EVIDENCE_ID="${EVIDENCE_ID:-USB-001}"
+IMAGE_DIR="$CASE_DIR/images"
+HASH_DIR="$CASE_DIR/hashes"
+LOG_DIR="$CASE_DIR/logs"
+SHOT_DIR="$CASE_DIR/screenshots"
+NOTES_DIR="$CASE_DIR/notes"
+ANALYSIS_DIR="$CASE_DIR/analysis"
+REPORT_DIR="$CASE_DIR/report"
+TOOLS_IMAGE="${TOOLS_IMAGE:-usb-forensics-tools:local}"
+TOOLS_BUILT=0
+DEV=""
+START_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+mkdir -p "$CASE_DIR" "$IMAGE_DIR" "$HASH_DIR" "$LOG_DIR" "$SHOT_DIR" "$NOTES_DIR" "$ANALYSIS_DIR" "$REPORT_DIR"
+
+die() { printf 'FATAL: %s\n' "$*" >&2; exit 1; }
+log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+
+command -v sudo >/dev/null || die "sudo is required"
+command -v docker >/dev/null || die "Docker CLI is required"
+command -v lsblk >/dev/null || die "lsblk is required"
+command -v sha256sum >/dev/null || die "sha256sum is required"
+command -v python3 >/dev/null || die "python3 is required"
+command -v termshot >/dev/null || command -v "$HOME/.local/bin/termshot" >/dev/null || die "termshot is required for screenshots"
+
+TERM_SHOT="$(command -v termshot || printf '%s' "$HOME/.local/bin/termshot")"
+mkdir -p "$IMAGE_DIR" "$HASH_DIR" "$LOG_DIR" "$SHOT_DIR" "$NOTES_DIR" "$ANALYSIS_DIR" "$REPORT_DIR"
+
+# Only create a fresh run directory. Never overwrite a previous run or evidence image.
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_DIR="$CASE_DIR/runs/$RUN_ID"
+mkdir -p "$RUN_DIR"
+exec 9>"$RUN_DIR/workflow.lock"
+flock -n 9 || die "Another workflow appears to be running."
+exec > >(tee -a "$RUN_DIR/workflow-console.txt") 2>&1
+
+capture() {
+  local label="$1"; shift
+  [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid capture label: $label"
+  local stamp log_file png_file rc
+  stamp="$(date -u +%Y%m%dT%H%M%S_%N)"
+  log_file="$LOG_DIR/${stamp}_${label}.txt"
+  png_file="$SHOT_DIR/${stamp}_${label}.png"
+  {
+    printf 'Step: %s\nUTC: %s\nHost: %s\nCase: %s\nCommand:' "$label" "$(date -u --iso-8601=seconds)" "$(hostname)" "$CASE_DIR"
+    printf ' %q' "$@"
+    printf '\n\n'
+    "$@"
+  } > >(tee "$log_file") 2>&1
+  rc=$?
+  printf '\nExit code: %s\nUTC end: %s\n' "$rc" "$(date -u --iso-8601=seconds)" | tee -a "$log_file"
+  "$TERM_SHOT" --raw-read "$log_file" --filename "$png_file" --columns 120 || {
+    log "WARNING: PNG creation failed for $label; text log is retained."
+  }
+  sha256sum "$log_file" > "$HASH_DIR/$(basename "$log_file").sha256"
+  [[ "$rc" -eq 0 ]] || die "Step '$label' failed with exit code $rc. See $log_file"
+}
+
+fail() { die "$*"; }
+
+need_confirmation() {
+  local prompt="$1" expected="$2" answer
+  printf '\n%s\nType exactly: %s\n> ' "$prompt" "$expected"
+  IFS= read -r answer
+  [[ "$answer" == "$expected" ]] || die "Confirmation did not match; stopped safely."
+}
+
+discover_device() {
+  local path="/dev/disk/by-id/usb-Generic_Flash_Disk_${EXPECTED_SERIAL}-0:0"
+  [[ -e "$path" ]] || die "Expected USB stable ID is missing: $path"
+  DEV="$(readlink -f "$path")"
+  [[ -b "$DEV" ]] || die "Resolved path is not a block device: $DEV"
+  local serial model type tran
+  serial="$(sudo udevadm info --query=property --name="$DEV" | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1)"
+  model="$(sudo udevadm info --query=property --name="$DEV" | sed -n 's/^ID_MODEL=//p' | head -n1)"
+  type="$(lsblk -dn -o TYPE "$DEV" | tr -d ' ')"
+  tran="$(lsblk -dn -o TRAN "$DEV" | tr -d ' ')"
+  [[ "$serial" == "$EXPECTED_SERIAL" ]] || die "Serial mismatch. Expected $EXPECTED_SERIAL, got '${serial:-missing}'."
+  [[ "$type" == "disk" ]] || die "Device is not a whole disk."
+  [[ "$tran" == "usb" ]] || die "Selected device is not detected on USB transport."
+  [[ "$model" == *Flash* || "$model" == *FLASH* || "$model" == *Disk* ]] || die "Model did not match expected flash media: '${model:-missing}'"
+  [[ "$DEV" != /dev/sda && "$DEV" != /dev/sdb ]] || die "Safety stop: selected path matches a protected server disk."
+  printf '%s\n' "$DEV"
+}
+
+check_storage() {
+  mountpoint -q "$BASE_MOUNT" || die "$BASE_MOUNT is not mounted."
+  local target_src evidence_src avail need_bytes image_bytes
+  target_src="$(findmnt -n -o SOURCE --target "$BASE_MOUNT")"
+  evidence_src="$(findmnt -n -o SOURCE --target "$CASE_DIR" 2>/dev/null || true)"
+  [[ -n "$target_src" ]] || die "Could not determine case-storage source."
+  if [[ -n "$evidence_src" && "$evidence_src" != "$target_src" ]]; then
+    die "Case directory does not reside on expected storage mount."
+  fi
+  avail="$(df -B1 --output=avail "$BASE_MOUNT" | tail -n1 | tr -d ' ')"
+  image_bytes="$(sudo blockdev --getsize64 "$DEV")"
+  # Four raw images plus 15% headroom.
+  need_bytes=$(( image_bytes * 4 + image_bytes / 2 + 1073741824 ))
+  (( avail >= need_bytes )) || die "Insufficient storage. Available=$avail required~=$need_bytes."
+  printf 'Storage source: %s\nAvailable bytes: %s\nDevice bytes: %s\nEstimated required bytes: %s\n' "$target_src" "$avail" "$image_bytes" "$need_bytes" > "$NOTES_DIR/storage-check-$RUN_ID.txt"
+}
+
+check_not_mounted() {
+  local mounts
+  mounts="$(lsblk -nrpo MOUNTPOINT "$DEV" | sed '/^$/d' || true)"
+  [[ -z "$mounts" ]] || die "USB has mounted filesystems. Stop and review: $mounts"
+}
+
+ensure_tools() {
+  if sudo docker image inspect "$TOOLS_IMAGE" >/dev/null 2>&1; then
+    TOOLS_BUILT=1
+  else
+    log "Building forensic tools image. Docker daemon must be running."
+    sudo docker build -t "$TOOLS_IMAGE" -f "$PWD/Dockerfile" "$PWD"
+    TOOLS_BUILT=1
+  fi
+}
+
+tool_run() {
+  [[ "$TOOLS_BUILT" -eq 1 ]] || die "Forensic tools image is not ready."
+  sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    -v "$CASE_DIR:/case:rw" "$TOOLS_IMAGE" "$@"
+}
+
+acquire_image() {
+  local name="$1" output="$IMAGE_DIR/$1.img" log_path="$LOG_DIR/$1.dc3dd.log" hash_path="$HASH_DIR/$1.source.sha256"
+  [[ ! -e "$output" && ! -e "$log_path" && ! -e "$hash_path" ]] || die "Refusing to overwrite existing evidence for $name."
+  check_not_mounted
+  sudo blockdev --setro "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Could not set source read-only."
+  log "Acquiring $name from $DEV. This command is synchronous and the next step waits for completion."
+  sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --device="$DEV:/dev/evidence:r" \
+    -v "$IMAGE_DIR:/evidence/images:rw" -v "$LOG_DIR:/evidence/logs:rw" \
+    "$TOOLS_IMAGE" dc3dd if=/dev/evidence hof="/evidence/images/$1.img" hash=sha256 rec=off log="/evidence/logs/$1.dc3dd.log"
+  # dc3dd must finish successfully or set -e aborts the workflow.
+  sha256sum "$output" > "$HASH_DIR/$1.sha256"
+  sha256sum -c "$HASH_DIR/$1.sha256"
+  cp "$LOG_DIR/$1.dc3dd.log" "$log_path"
+  sha256sum "$log_path" > "$HASH_DIR/$1.dc3dd.log.sha256"
+  "$TERM_SHOT" --raw-read "$log_path" --filename "$SHOT_DIR/$1-acquisition-log.png" --columns 120 || true
+  printf '%s\n' "$name" >> "$NOTES_DIR/acquisition-order.txt"
+}
+
+verify_image_pair() {
+  local first="$1" second="$2"
+  cmp -s "$IMAGE_DIR/$first.img" "$IMAGE_DIR/$second.img" || die "Images $first and $second differ; do not continue to destructive stage."
+  printf 'IDENTICAL\n' | tee "$ANALYSIS_DIR/$first-vs-$second.txt"
+  sha256sum "$IMAGE_DIR/$first.img" "$IMAGE_DIR/$second.img" | tee -a "$ANALYSIS_DIR/$first-vs-$second.txt"
+}
+
+wipe_device() {
+  check_not_mounted
+  local serial now
+  serial="$(sudo udevadm info --query=property --name="$DEV" | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1)"
+  [[ "$serial" == "$EXPECTED_SERIAL" ]] || die "Serial changed before wipe."
+  sudo blockdev --setrw "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Device is not writable; refusing wipe."
+  printf '\nDESTRUCTIVE ACTION: write zeroes to the entire logical device %s\nSerial: %s\n' "$DEV" "$serial"
+  need_confirmation "All four prior image/hash records must exist before this step." "WIPE-$EXPECTED_SERIAL"
+  sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
+    "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log=/evidence/logs/04_wipe_operation.log
+  sync
+  sudo blockdev --setro "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Could not re-enable read-only state after wipe."
+}
+
+zero_verify() {
+  local file="$IMAGE_DIR/04_after_wipe.img" size
+  size="$(stat -c%s "$file")"
+  cmp -n "$size" "$file" /dev/zero || die "Post-wipe image contains non-zero data or comparison failed."
+  printf 'PASS: all %s bytes are zero. This verifies the logical image only, not physical NAND remanence.\n' "$size" | tee "$ANALYSIS_DIR/zero_image_verification.status"
+}
+
+write_report() {
+  local report="$REPORT_DIR/FINAL_REPORT_TEMPLATE.md"
+  {
+    printf '# USB Forensic Acquisition Report\n\n'
+    printf -- '- Case: %s\n- Host: %s\n- Workflow version: %s\n- Start UTC: %s\n- End UTC: %s\n- Device path at acquisition: %s\n- Expected serial: %s\n\n' "$EVIDENCE_ID" "$(hostname)" "$APP_VERSION" "$START_UTC" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$DEV" "$EXPECTED_SERIAL"
+    printf '## Images\n\n'
+    for f in 01_initial 02_after_deletion 03_pre_wipe_repeat 04_after_wipe; do
+      if [[ -f "$IMAGE_DIR/$f.img" ]]; then
+        printf -- '- %s: %s bytes\n' "$f" "$(stat -c%s "$IMAGE_DIR/$f.img")"
+        sha256sum "$IMAGE_DIR/$f.img"
+      else
+        printf -- '- %s: NOT CREATED\n' "$f"
+      fi
+    done
+    printf '\n## Validation\n\n'
+    printf 'Results must be read from the saved acquisition, comparison, and zero-verification logs. No success is inferred for a missing output.\n'
+  } > "$report"
+  sha256sum "$report" > "$HASH_DIR/FINAL_REPORT_TEMPLATE.md.sha256"
+}
+
+main() {
+  log "Starting guarded workflow $APP_VERSION"
+  [[ "$(id -u)" -ne 0 ]] || die "Run as an ordinary user; sudo will be requested only where needed."
+  [[ -f "$PWD/Dockerfile" ]] || die "Run from repository root (Dockerfile missing)."
+  [[ -f "$PWD/docker-compose.yml" ]] || die "docker-compose.yml missing."
+  command -v flock >/dev/null || die "flock is required."
+
+  capture S00_HOST_AND_STORAGE bash -c 'date -u --iso-8601=seconds; hostname; uname -a; lsblk -e7 -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS; df -hT /srv/cs2ssd'
+  discover_device >/dev/null
+  printf 'Detected device details:\n'
+  lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
+  need_confirmation "This workflow can permanently erase the USB identified below. Confirm the serial and target." "START-$EXPECTED_SERIAL"
+
+  check_storage
+  check_not_mounted
+  capture S01_DEVICE_IDENTITY bash -c 'udevadm info --query=property --name="$1"; lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$1"' _ "$DEV"
+
+  if ! sudo docker info >/dev/null 2>&1; then
+    log "Docker daemon is not available. Trying to start docker.service."
+    sudo systemctl start docker
+    sudo docker info >/dev/null || die "Docker did not become available; stop here."
+  fi
+  ensure_tools
+  capture S02_TOOL_VERSIONS tool_run -lc 'dc3dd --version; mmls -V 2>&1 || true; fls -V 2>&1 || true; sha256sum --version | head -n1'
+
+  # This lab intentionally formats the USB as a new disposable test medium.
+  need_confirmation "The current USB contains a Windows installer. Reinitialization will destroy it. Type the exact phrase." "ERASE-AND-REINITIALIZE-$EXPECTED_SERIAL"
+  sudo blockdev --setrw "$DEV"
+  check_not_mounted
+  sudo wipefs --all "$DEV"
+  sudo parted --script "$DEV" mklabel msdos
+  sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
+  sudo partprobe "$DEV"
+  udevadm settle
+  local part
+  part="$(lsblk -nrpo NAME,TYPE "$DEV" | awk '$2=="part"{print $1;exit}')"
+  [[ -n "$part" && -b "$part" ]] || die "New test partition was not detected."
+  sudo mkfs.vfat -F 32 -n FORENSICLAB "$part"
+  sudo blockdev --setro "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Failed to protect the prepared device."
+  capture S03_PREPARED_TEST_MEDIA lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
+
+  # Create harmless synthetic test files, then unmount before imaging.
+  sudo blockdev --setrw "$DEV"
+  local mount_dir="$RUN_DIR/usb-mount"
+  mkdir -p "$mount_dir"
+  sudo mount "$part" "$mount_dir"
+  printf 'Synthetic forensic test file 1\n' | sudo tee "$mount_dir/sample-01.txt" >/dev/null
+  printf 'Synthetic forensic test file 2\n' | sudo tee "$mount_dir/sample-02.txt" >/dev/null
+  dd if=/dev/urandom of="$mount_dir/sample-03.bin" bs=4096 count=4 status=none
+  sudo sha256sum "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt" "$mount_dir/sample-03.bin" | tee "$NOTES_DIR/synthetic-files-before-deletion.sha256"
+  sync
+  sudo umount "$mount_dir"
+  sudo blockdev --setro "$DEV"
+
+  acquire_image "01_initial"
+  capture S04_INITIAL_IMAGE_DETAILS bash -c 'stat -c "%n %s bytes" "$1"; sha256sum "$1"; cat "$2"' _ "$IMAGE_DIR/01_initial.img" "$HASH_DIR/01_initial.sha256"
+
+  # Delete two synthetic files. Device path and partition are re-discovered after re-enabling writes.
+  sudo blockdev --setrw "$DEV"
+  part="$(lsblk -nrpo NAME,TYPE "$DEV" | awk '$2=="part"{print $1;exit}')"
+  sudo mount "$part" "$mount_dir"
+  sudo rm -- "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt"
+  sync
+  sudo umount "$mount_dir"
+  sudo blockdev --setro "$DEV"
+  acquire_image "02_after_deletion"
+  acquire_image "03_pre_wipe_repeat"
+  verify_image_pair "02_after_deletion" "03_pre_wipe_repeat"
+
+  # Hash manifest of all pre-wipe images must exist before entering the destructive stage.
+  for n in 01_initial 02_after_deletion 03_pre_wipe_repeat; do
+    [[ -s "$IMAGE_DIR/$n.img" && -s "$HASH_DIR/$n.sha256" ]] || die "Missing pre-wipe evidence: $n"
+    sha256sum -c "$HASH_DIR/$n.sha256"
+  done
+
+  wipe_device
+  acquire_image "04_after_wipe"
+  zero_verify
+
+  # Analyze image partitions and deleted entries; analysis failures are recorded and do not masquerade as successes.
+  tool_run -lc "mmls /case/images/01_initial.img" > "$ANALYSIS_DIR/initial-partitions.txt" 2>&1 || true
+  tool_run -lc "mmls /case/images/02_after_deletion.img" > "$ANALYSIS_DIR/post-deletion-partitions.txt" 2>&1 || true
+  capture S90_FINAL_IMAGE_HASHES sha256sum "$IMAGE_DIR/01_initial.img" "$IMAGE_DIR/02_after_deletion.img" "$IMAGE_DIR/03_pre_wipe_repeat.img" "$IMAGE_DIR/04_after_wipe.img"
+  write_report
+  capture S99_FINAL_INVENTORY find "$CASE_DIR" -maxdepth 3 -type f -printf "%p (%s bytes)\n"
+  log "WORKFLOW FINISHED. Review every log and status before making any claim."
+}
+
+main "$@"
