@@ -1,0 +1,10 @@
+.DS_Store
+*.img
+*.E01
+*.dd
+*.raw
+*.qcow2
+*.log
+*.png
+*.sha256
+.env
