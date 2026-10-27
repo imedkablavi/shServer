@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate shell syntax
+      - name: Bash syntax
         run: bash -n scripts/usb-forensics
-      - name: Static checks
-        run: bash scripts/check-syntax.sh
+      - name: Non-destructive guardrails
+        run: bash tests/shellcheck-guardrails.sh
