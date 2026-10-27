@@ -241,34 +241,43 @@ main() {
   sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
-  sudo wipefs --all "$DEV"
-  sudo parted --script "$DEV" mklabel msdos
-  sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
-  sudo partprobe "$DEV"
-  sudo udevadm settle
+  capture S03_WIPEFS sudo wipefs --all "$DEV"
+  capture S04_CREATE_PARTITION_TABLE sudo parted --script "$DEV" mklabel msdos
+  capture S05_CREATE_PARTITION sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
+  capture S06_REREAD_PARTITIONS sudo partprobe "$DEV"
+  capture S06_SETTLE_UDEV sudo udevadm settle
   PART="$(lsblk -nrpo NAME,TYPE "$DEV" | awk '$2=="part"{print $1;exit}')"
   [[ -n "$PART" && -b "$PART" ]] || die "Prepared partition was not detected."
-  sudo mkfs.vfat -F 32 -n FORENSICLAB "$PART"
-  capture S03_PREPARED_TEST_MEDIA lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
+  capture S07_CREATE_FILESYSTEM sudo mkfs.vfat -F 32 -n FORENSICLAB "$PART"
+  capture S08_PREPARED_TEST_MEDIA lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
 
   local mount_dir="$RUN_DIR/usb-mount"
   mkdir -p "$mount_dir"
-  sudo mount "$PART" "$mount_dir"
-  printf 'Synthetic forensic test file 1\n' | sudo tee "$mount_dir/sample-01.txt" >/dev/null
-  printf 'Synthetic forensic test file 2\n' | sudo tee "$mount_dir/sample-02.txt" >/dev/null
-  sudo dd if=/dev/urandom of="$mount_dir/sample-03.bin" bs=4096 count=4 status=none
-  sudo sha256sum "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt" "$mount_dir/sample-03.bin" > "$NOTES_DIR/synthetic-files-before-deletion.sha256"
-  sudo sync
-  sudo umount "$mount_dir"
+  capture S09_CREATE_SYNTHETIC_FILES bash -Eeuo pipefail -c '
+    part="$1"; mount_dir="$2"; manifest="$3"
+    mount "$part" "$mount_dir"
+    printf "Synthetic forensic test file 1\\n" > "$mount_dir/sample-01.txt"
+    printf "Synthetic forensic test file 2\\n" > "$mount_dir/sample-02.txt"
+    dd if=/dev/urandom of="$mount_dir/sample-03.bin" bs=4096 count=4 status=none
+    sha256sum "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt" "$mount_dir/sample-03.bin" > "$manifest"
+    sync
+    umount "$mount_dir"
+  ' _ "$PART" "$mount_dir" "$NOTES_DIR/synthetic-files-before-deletion.sha256"
 
   acquire_image "01_initial"
-  sudo blockdev --setrw "$DEV"
+  capture S10_ENABLE_WRITES sudo blockdev --setrw "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Could not re-enable writes before deletion."
   PART="$(lsblk -nrpo NAME,TYPE "$DEV" | awk '$2=="part"{print $1;exit}')"
   [[ -n "$PART" && -b "$PART" ]] || die "USB partition disappeared before deletion."
-  sudo mount "$PART" "$mount_dir"
-  sudo rm -- "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt"
-  sudo sync
-  sudo umount "$mount_dir"
+  capture S11_DELETE_SYNTHETIC_FILES bash -Eeuo pipefail -c '
+    part="$1"; mount_dir="$2"
+    mount "$part" "$mount_dir"
+    rm -- "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt"
+    sync
+    umount "$mount_dir"
+  ' _ "$PART" "$mount_dir"
+  capture S12_REENABLE_READ_ONLY sudo blockdev --setro "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "USB could not be set read-only after deletion."
   acquire_image "02_after_deletion"
   acquire_image "03_pre_wipe_repeat"
   verify_image_pair "02_after_deletion" "03_pre_wipe_repeat"
