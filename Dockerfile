@@ -6,4 +6,4 @@ RUN apt-get update \
     dosfstools ntfs-3g util-linux coreutils file usbutils python3 \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
-ENTRYPOINT ["/bin/bash"]
+CMD ["/bin/bash"]
