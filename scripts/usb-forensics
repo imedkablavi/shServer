@@ -39,7 +39,7 @@ for path in "$IMAGE_DIR" "$HASH_DIR" "$LOG_DIR" "$SHOT_DIR" "$NOTES_DIR" "$ANALY
   mkdir -p "$path"
 done
 
-RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_ID="$(date -u +%Y%m%dT%H%M%S%N)"
 RUN_DIR="$CASE_DIR/runs/$RUN_ID"
 mkdir -p "$RUN_DIR"
 exec 9>"$RUN_DIR/workflow.lock"
@@ -54,6 +54,7 @@ assert_fresh_evidence() {
     [[ ! -e "$HASH_DIR/$name.sha256" ]] || die "Existing image hash found for $name. Choose a new CASE_DIR."
   done
   [[ ! -e "$REPORT_DIR/FINAL_REPORT_TEMPLATE.md" ]] || die "Existing report found; choose a new CASE_DIR to avoid overwriting prior results."
+  [[ ! -e "$NOTES_DIR/synthetic-files-before-deletion.sha256" ]] || die "Existing synthetic-file manifest found; choose a new CASE_DIR to avoid overwriting prior notes."
 }
 
 cleanup_on_exit() {
@@ -347,11 +348,12 @@ main() {
   capture S02_ENABLE_WRITES_BEFORE_INITIAL_CLEAN sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
+  local preclean_log="$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log"
+  log "The initial zero-clean writes zeros across the entire logical USB device; progress waits for dc3dd to finish."
   capture S03_PRECONDITION_ZERO_WIPE sudo docker run --rm --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
     "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log="/evidence/logs/${RUN_ID}_precondition_wipe.dc3dd.log"
-  local preclean_log="$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log"
   [[ -s "$preclean_log" ]] || die "Initial zero-clean log is missing."
   capture S03A_HASH_PRECONDITION_LOG bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$preclean_log" "$HASH_DIR/${RUN_ID}_precondition_wipe.dc3dd.log.sha256"
   "$TERM_SHOT" --raw-read "$preclean_log" --filename "$SHOT_DIR/${RUN_ID}_precondition_wipe.png" --columns 120 || die "Could not render the precondition wipe log."
