@@ -246,13 +246,13 @@ write_report() {
 main() {
   [[ -f "$PWD/Dockerfile" && -f "$PWD/docker-compose.yml" ]] || die "Run from repository root; Dockerfile and docker-compose.yml must exist."
   capture S00_HOST_AND_STORAGE bash -c 'date -u --iso-8601=seconds; hostname; uname -a; lsblk -e7 -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS; df -hT /srv/cs2ssd'
-  ensure_host_dependencies
+  capture S00_HOST_DEPENDENCIES ensure_host_dependencies
   discover_device
   capture S01_DEVICE_IDENTITY bash -c 'udevadm info --query=property --name="$1"; lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$1"' _ "$DEV"
-  check_storage
+  capture S01_STORAGE_CAPACITY check_storage
   check_not_mounted
-  ensure_tools
-  capture S02_TOOL_VERSIONS tool_run -lc 'dc3dd --version; mmls -V 2>&1 || true; fls -V 2>&1 || true; sha256sum --version | head -n1'
+  capture S02_TOOLS_BUILD ensure_tools
+  capture S03_TOOL_VERSIONS tool_run -lc 'dc3dd --version; mmls -V 2>&1 || true; fls -V 2>&1 || true; sha256sum --version | head -n1'
 
   need_confirmation "This workflow will destroy the existing Windows installer and reinitialize the specified USB. Confirm the serial after reviewing S01." "ERASE-AND-REINITIALIZE-$EXPECTED_SERIAL"
   # Protect against system-disk aliases even if device enumeration changes during the run.
@@ -260,15 +260,15 @@ main() {
   sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
-  capture S03_WIPEFS sudo wipefs --all "$DEV"
-  capture S04_CREATE_PARTITION_TABLE sudo parted --script "$DEV" mklabel msdos
-  capture S05_CREATE_PARTITION sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
-  capture S06_REREAD_PARTITIONS sudo partprobe "$DEV"
-  capture S06_SETTLE_UDEV sudo udevadm settle
+  capture S04_WIPEFS sudo wipefs --all "$DEV"
+  capture S05_CREATE_PARTITION_TABLE sudo parted --script "$DEV" mklabel msdos
+  capture S06_CREATE_PARTITION sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
+  capture S07_REREAD_PARTITIONS sudo partprobe "$DEV"
+  capture S08_SETTLE_UDEV sudo udevadm settle
   PART="$(lsblk -nrpo NAME,TYPE "$DEV" | awk '$2=="part"{print $1;exit}')"
   [[ -n "$PART" && -b "$PART" ]] || die "Prepared partition was not detected."
-  capture S07_CREATE_FILESYSTEM sudo mkfs.vfat -F 32 -n FORENSICLAB "$PART"
-  capture S08_PREPARED_TEST_MEDIA lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
+  capture S09_CREATE_FILESYSTEM sudo mkfs.vfat -F 32 -n FORENSICLAB "$PART"
+  capture S10_PREPARED_TEST_MEDIA lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
 
   local mount_dir="$RUN_DIR/usb-mount"
   mkdir -p "$mount_dir"
