@@ -59,10 +59,15 @@ capture() {
     printf 'Step: %s\nUTC: %s\nHost: %s\nCase: %s\nCommand:' "$label" "$(date -u --iso-8601=seconds)" "$(hostname)" "$CASE_DIR"
     printf ' %q' "$@"
     printf '\n\n--- OUTPUT ---\n'
-    "$@" || rc=$?
+  } > "$log_file"
+  if "$@" >> "$log_file" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  {
     printf '\n--- END OF OUTPUT ---\nExit code: %s\nUTC end: %s\n' "$rc" "$(date -u --iso-8601=seconds)"
-    exit "$rc"
-  } > "$log_file" 2>&1 || rc=$?
+  } >> "$log_file"
   cat "$log_file"
   if ! "$TERM_SHOT" --raw-read "$log_file" --filename "$png_file" --columns 120; then
     log "WARNING: PNG creation failed for $label. Text log retained."
@@ -116,7 +121,8 @@ check_not_mounted() {
 
 ensure_tools() {
   if ! sudo docker info >/dev/null 2>&1; then
-    log "Docker daemon is unavailable; attempting to start docker.service."
+    log "Docker daemon is unavailable. Starting it may also start other containers with restart policies."
+    need_confirmation "Allow systemd to start Docker for this workflow?" "START-DOCKER"
     sudo systemctl start docker
     sudo docker info >/dev/null || die "Docker daemon did not become available."
   fi
@@ -250,7 +256,7 @@ main() {
   sudo mount "$PART" "$mount_dir"
   printf 'Synthetic forensic test file 1\n' | sudo tee "$mount_dir/sample-01.txt" >/dev/null
   printf 'Synthetic forensic test file 2\n' | sudo tee "$mount_dir/sample-02.txt" >/dev/null
-  dd if=/dev/urandom of="$mount_dir/sample-03.bin" bs=4096 count=4 status=none
+  sudo dd if=/dev/urandom of="$mount_dir/sample-03.bin" bs=4096 count=4 status=none
   sudo sha256sum "$mount_dir/sample-01.txt" "$mount_dir/sample-02.txt" "$mount_dir/sample-03.bin" > "$NOTES_DIR/synthetic-files-before-deletion.sha256"
   sudo sync
   sudo umount "$mount_dir"
