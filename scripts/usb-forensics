@@ -46,6 +46,16 @@ exec 9>"$RUN_DIR/workflow.lock"
 flock -n 9 || die "Another workflow appears to be running."
 exec > >(tee -a "$RUN_DIR/workflow-console.txt") 2>&1
 
+assert_fresh_evidence() {
+  local name
+  for name in 01_initial 02_after_deletion 03_pre_wipe_repeat 04_after_wipe; do
+    [[ ! -e "$IMAGE_DIR/$name.img" ]] || die "Existing image found: $IMAGE_DIR/$name.img. Choose a new CASE_DIR; refusing to erase the USB."
+    [[ ! -e "$LOG_DIR/$name.dc3dd.log" ]] || die "Existing acquisition log found for $name. Choose a new CASE_DIR."
+    [[ ! -e "$HASH_DIR/$name.sha256" ]] || die "Existing image hash found for $name. Choose a new CASE_DIR."
+  done
+  [[ ! -e "$REPORT_DIR/FINAL_REPORT_TEMPLATE.md" ]] || die "Existing report found; choose a new CASE_DIR to avoid overwriting prior results."
+}
+
 cleanup_on_exit() {
   local rc=$?
   trap - EXIT
@@ -83,6 +93,8 @@ capture() {
   cat "$log_file"
   if ! "$TERM_SHOT" --raw-read "$log_file" --filename "$png_file" --columns 120; then
     log "WARNING: PNG creation failed for $label. Text log retained."
+  elif [[ -s "$png_file" ]]; then
+    sha256sum "$png_file" > "$HASH_DIR/$(basename "$png_file").sha256"
   fi
   sha256sum "$log_file" > "$HASH_DIR/$(basename "$log_file").sha256"
   [[ "$rc" -eq 0 ]] || die "Step '$label' failed (exit $rc). See $log_file"
@@ -213,15 +225,16 @@ wipe_device() {
     [[ -s "$IMAGE_DIR/$name.img" && -s "$HASH_DIR/$name.sha256" ]] || die "Missing pre-wipe image or hash: $name"
     capture "VERIFY_PREWIPE_$name" sha256sum -c "$HASH_DIR/$name.sha256"
   done
+  need_confirmation "Final destructive action: zero all logical sectors on $DEV (serial $serial)." "WIPE-$EXPECTED_SERIAL"
   capture S19_ENABLE_WRITES_FOR_WIPE sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Device is not writable; refusing wipe."
-  need_confirmation "Final destructive action: zero all logical sectors on $DEV (serial $serial)." "WIPE-$EXPECTED_SERIAL"
+  local wipe_log="$LOG_DIR/${RUN_ID}_04_wipe_operation.dc3dd.log"
   capture S20_WIPE_OPERATION sudo docker run --rm --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
-    "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log=/evidence/logs/04_wipe_operation.log
-  [[ -s "$LOG_DIR/04_wipe_operation.log" ]] || die "Wipe log is missing; do not claim success."
-  sha256sum "$LOG_DIR/04_wipe_operation.log" > "$HASH_DIR/04_wipe_operation.log.sha256"
+    "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log="/evidence/logs/${RUN_ID}_04_wipe_operation.dc3dd.log"
+  [[ -s "$wipe_log" ]] || die "Wipe log is missing; do not claim success."
+  capture S20B_HASH_WIPE_LOG bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$wipe_log" "$HASH_DIR/${RUN_ID}_04_wipe_operation.dc3dd.log.sha256"
   capture S21_SYNC_AFTER_WIPE sudo sync
   capture S22_SET_READ_ONLY_AFTER_WIPE sudo blockdev --setro "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Failed to restore read-only state after wipe."
@@ -259,6 +272,7 @@ write_report() {
 
 main() {
   [[ -f "$PWD/Dockerfile" && -f "$PWD/docker-compose.yml" ]] || die "Run from repository root; Dockerfile and docker-compose.yml must exist."
+  assert_fresh_evidence
   capture S00_HOST_AND_STORAGE bash -c 'date -u --iso-8601=seconds; hostname; uname -a; lsblk -e7 -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS; df -hT /srv/cs2ssd'
   capture S00_HOST_DEPENDENCIES ensure_host_dependencies
   discover_device
@@ -271,9 +285,16 @@ main() {
   need_confirmation "This workflow will destroy the existing Windows installer and reinitialize the specified USB. Confirm the serial after reviewing S01." "ERASE-AND-REINITIALIZE-$EXPECTED_SERIAL"
   # Protect against system-disk aliases even if device enumeration changes during the run.
   [[ "$(readlink -f "$DEV")" == "$(readlink -f "/dev/disk/by-id/usb-Generic_Flash_Disk_${EXPECTED_SERIAL}-0:0")" ]] || die "USB identity changed immediately before reinitialization."
+  [[ "$(readlink -f "$DEV")" == "$(readlink -f "/dev/disk/by-id/usb-Generic_Flash_Disk_${EXPECTED_SERIAL}-0:0")" ]] || die "USB identity changed before initial clean."
   sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
+  capture S03_PRECONDITION_ZERO_WIPE sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
+    "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log="/evidence/logs/${RUN_ID}_precondition_wipe.dc3dd.log"
+  [[ -s "$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log" ]] || die "Initial zero-clean log is missing."
+  capture S03B_SYNC_AFTER_PRECONDITION sudo sync
   capture S04_WIPEFS sudo wipefs --all "$DEV"
   capture S05_CREATE_PARTITION_TABLE sudo parted --script "$DEV" mklabel msdos
   capture S06_CREATE_PARTITION sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
