@@ -230,7 +230,10 @@ main() {
   capture S02_TOOL_VERSIONS tool_run -lc 'dc3dd --version; mmls -V 2>&1 || true; fls -V 2>&1 || true; sha256sum --version | head -n1'
 
   need_confirmation "This workflow will destroy the existing Windows installer and reinitialize the specified USB. Confirm the serial after reviewing S01." "ERASE-AND-REINITIALIZE-$EXPECTED_SERIAL"
+  # Protect against system-disk aliases even if device enumeration changes during the run.
+  [[ "$(readlink -f "$DEV")" == "$(readlink -f "/dev/disk/by-id/usb-Generic_Flash_Disk_${EXPECTED_SERIAL}-0:0")" ]] || die "USB identity changed immediately before reinitialization."
   sudo blockdev --setrw "$DEV"
+  [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
   sudo wipefs --all "$DEV"
   sudo parted --script "$DEV" mklabel msdos
