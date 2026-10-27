@@ -211,6 +211,26 @@ get_partition_offset() {
   printf 'Image: %s.img\nFilesystem start sector: %s\n' "$name" "$PARTITION_OFFSET"
 }
 
+save_tsk_output() {
+  local mode="$1" offset="$2" output="$3" command_line
+  case "$mode" in
+    initial)
+      command_line="fls -r -o $offset /case/images/01_initial.img"
+      ;;
+    deleted)
+      command_line="fls -r -d -o $offset /case/images/02_after_deletion.img"
+      ;;
+    *)
+      die "Unknown TSK analysis mode: $mode"
+      ;;
+  esac
+  if tool_run -lc "$command_line" | tee "$output"; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 verify_image_pair() {
   local first="$1" second="$2"
   capture "CMP_$first" cmp -s "$IMAGE_DIR/$first.img" "$IMAGE_DIR/$second.img"
@@ -323,8 +343,14 @@ main() {
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
     "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log="/evidence/logs/${RUN_ID}_precondition_wipe.dc3dd.log"
-  [[ -s "$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log" ]] || die "Initial zero-clean log is missing."
-  capture S03B_SYNC_AFTER_PRECONDITION sudo sync
+  local preclean_log="$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log"
+  [[ -s "$preclean_log" ]] || die "Initial zero-clean log is missing."
+  capture S03A_HASH_PRECONDITION_LOG bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$preclean_log" "$HASH_DIR/${RUN_ID}_precondition_wipe.dc3dd.log.sha256"
+  "$TERM_SHOT" --raw-read "$preclean_log" --filename "$SHOT_DIR/${RUN_ID}_precondition_wipe.png" --columns 120 || die "Could not render the precondition wipe log."
+  local device_bytes
+  device_bytes="$(sudo blockdev --getsize64 "$DEV")"
+  capture S03B_VERIFY_PRECONDITION_ZERO sudo cmp -n "$device_bytes" "$DEV" /dev/zero
+  capture S03C_SYNC_AFTER_PRECONDITION sudo sync
   capture S04_WIPEFS sudo wipefs --all "$DEV"
   capture S05_CREATE_PARTITION_TABLE sudo parted --script "$DEV" mklabel msdos
   capture S06_CREATE_PARTITION sudo parted --script "$DEV" mkpart primary fat32 1MiB 100%
@@ -385,10 +411,10 @@ main() {
   DELETED_OFFSET="$PARTITION_OFFSET"
   printf '01_initial.img=%s\n02_after_deletion.img=%s\n' "$INITIAL_OFFSET" "$DELETED_OFFSET" > "$NOTES_DIR/partition_offsets.txt"
   capture S17_PARTITION_OFFSETS cat "$NOTES_DIR/partition_offsets.txt"
-  capture S18_INITIAL_FILE_LIST tool_run -lc "fls -r -o $INITIAL_OFFSET /case/images/01_initial.img"
-  capture S19_ANALYZE_DELETED_ENTRIES tool_run -lc "fls -r -d -o $DELETED_OFFSET /case/images/02_after_deletion.img"
+  capture S18_INITIAL_FILE_LIST save_tsk_output initial "$INITIAL_OFFSET" "$ANALYSIS_DIR/initial-file-list.txt"
+  capture S19_ANALYZE_DELETED_ENTRIES save_tsk_output deleted "$DELETED_OFFSET" "$ANALYSIS_DIR/deleted-entries.txt"
   cp "$ANALYSIS_DIR/02_after_deletion-vs-03_pre_wipe_repeat.txt" "$ANALYSIS_DIR/image-repeat-comparison.txt"
-  capture S90_FINAL_IMAGE_HASHES sha256sum "$IMAGE_DIR/01_initial.img" "$IMAGE_DIR/02_after_deletion.img" "$IMAGE_DIR/03_pre_wipe_repeat.img" "$IMAGE_DIR/04_after_wipe.img"
+  capture S90_FINAL_IMAGE_HASHES bash -Eeuo pipefail -c 'cd "$1"; sha256sum images/*.img | tee hashes/ALL_IMAGES.sha256; sha256sum -c hashes/ALL_IMAGES.sha256' _ "$CASE_DIR"
   write_report
   capture S99_FINAL_INVENTORY find "$CASE_DIR" -maxdepth 4 -type f -printf '%p (%s bytes)\n'
   log "Workflow finished without detected command failures. Review all logs and manifests before interpreting results."
