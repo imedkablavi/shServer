@@ -191,19 +191,25 @@ ensure_tools() {
 }
 
 tool_run() {
+  # Match the host user's numeric identity so private case directories remain readable
+  # with all Linux capabilities dropped inside the container.
   sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     -v "$CASE_DIR:/case:ro" "$TOOLS_IMAGE" /bin/bash "$@"
 }
 
 acquire_image() {
-  local name="$1" output="$IMAGE_DIR/$1.img" dc_log="$LOG_DIR/$1.dc3dd.log"
+  local name="$1" output="$IMAGE_DIR/$1.img" dc_log="$LOG_DIR/$1.dc3dd.log" disk_gid
   [[ ! -e "$output" && ! -e "$dc_log" && ! -e "$HASH_DIR/$1.sha256" ]] || die "Refusing to overwrite prior evidence for $name."
+  disk_gid="$(getent group disk | cut -d: -f3)"
+  [[ "$disk_gid" =~ ^[0-9]+$ ]] || die "Could not determine the host disk group ID for read-only acquisition."
   check_not_mounted
   capture "SET_RO_$name" sudo blockdev --setro "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Could not set source read-only."
   log "Acquiring $name. Execution is synchronous; next stage waits until dc3dd exits."
   capture "ACQUIRE_$name" sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --group-add "$disk_gid" \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:r" \
     -v "$IMAGE_DIR:/evidence/images:rw" -v "$LOG_DIR:/evidence/logs:rw" \
@@ -272,8 +278,11 @@ wipe_device() {
   need_confirmation "Final destructive action: zero all logical sectors on $DEV (serial $serial)." "WIPE-$EXPECTED_SERIAL"
   capture S19_ENABLE_WRITES_FOR_WIPE sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Device is not writable; refusing wipe."
-  local wipe_log="$LOG_DIR/${RUN_ID}_04_wipe_operation.dc3dd.log"
+  local wipe_log="$LOG_DIR/${RUN_ID}_04_wipe_operation.dc3dd.log" disk_gid
+  disk_gid="$(getent group disk | cut -d: -f3)"
+  [[ "$disk_gid" =~ ^[0-9]+$ ]] || die "Could not determine the host disk group ID for the final wipe."
   capture S20_WIPE_OPERATION sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --group-add "$disk_gid" \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
     "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log="/evidence/logs/${RUN_ID}_04_wipe_operation.dc3dd.log"
@@ -354,9 +363,12 @@ main() {
   capture S02_ENABLE_WRITES_BEFORE_INITIAL_CLEAN sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Cannot enable writes for USB reinitialization."
   check_not_mounted
-  local preclean_log="$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log"
+  local preclean_log="$LOG_DIR/${RUN_ID}_precondition_wipe.dc3dd.log" disk_gid
+  disk_gid="$(getent group disk | cut -d: -f3)"
+  [[ "$disk_gid" =~ ^[0-9]+$ ]] || die "Could not determine the host disk group ID for the initial zero-clean."
   log "The initial zero-clean writes zeros across the entire logical USB device; progress waits for dc3dd to finish."
   capture S03_PRECONDITION_ZERO_WIPE sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --group-add "$disk_gid" \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:rw" -v "$LOG_DIR:/evidence/logs:rw" \
     "$TOOLS_IMAGE" dc3dd wipe=/dev/evidence hash=sha256 log="/evidence/logs/${RUN_ID}_precondition_wipe.dc3dd.log"
