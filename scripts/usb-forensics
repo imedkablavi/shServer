@@ -126,7 +126,7 @@ ensure_host_dependencies() {
   command -v udevadm >/dev/null || missing+=(udev)
   if (("${#missing[@]}" > 0)); then
     local packages
-    packages="$(printf '%s\\n' "${missing[@]}" | sort -u | paste -sd ' ' -)"
+    packages="$(printf '%s\n' "${missing[@]}" | sort -u | paste -sd ' ' -)"
     log "Missing host packages required for partitioning: $packages"
     need_confirmation "Install missing host packages through apt before proceeding?" "INSTALL-HOST-DEPS"
     capture S00_INSTALL_HOST_DEPENDENCIES sudo bash -Eeuo pipefail -c "apt-get update && apt-get install -y $packages"
@@ -159,19 +159,19 @@ acquire_image() {
   local name="$1" output="$IMAGE_DIR/$1.img" dc_log="$LOG_DIR/$1.dc3dd.log"
   [[ ! -e "$output" && ! -e "$dc_log" && ! -e "$HASH_DIR/$1.sha256" ]] || die "Refusing to overwrite prior evidence for $name."
   check_not_mounted
-  sudo blockdev --setro "$DEV"
+  capture "SET_RO_$name" sudo blockdev --setro "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "1" ]] || die "Could not set source read-only."
   log "Acquiring $name. Execution is synchronous; next stage waits until dc3dd exits."
-  sudo docker run --rm --network none --read-only --cap-drop ALL \
+  capture "ACQUIRE_$name" sudo docker run --rm --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --device="$DEV:/dev/evidence:r" \
     -v "$IMAGE_DIR:/evidence/images:rw" -v "$LOG_DIR:/evidence/logs:rw" \
     "$TOOLS_IMAGE" dc3dd if=/dev/evidence hof="/evidence/images/$name.img" hash=sha256 rec=off log="/evidence/logs/$name.dc3dd.log"
   [[ -s "$output" ]] || die "Acquisition returned but image is missing/empty: $output"
   [[ -s "$dc_log" ]] || die "dc3dd log is missing: $dc_log"
-  sha256sum "$output" > "$HASH_DIR/$name.sha256"
-  sha256sum -c "$HASH_DIR/$name.sha256"
-  sha256sum "$dc_log" > "$HASH_DIR/$name.dc3dd.log.sha256"
+  capture "HASH_$name" bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$output" "$HASH_DIR/$name.sha256"
+  capture "VERIFY_HASH_$name" sha256sum -c "$HASH_DIR/$name.sha256"
+  capture "HASH_LOG_$name" bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$dc_log" "$HASH_DIR/$name.dc3dd.log.sha256"
   printf '%s\n' "$name" >> "$NOTES_DIR/acquisition-order.txt"
   "$TERM_SHOT" --raw-read "$dc_log" --filename "$SHOT_DIR/$name-acquisition-log.png" --columns 120 || log "Could not screenshot dc3dd log."
 }
@@ -197,9 +197,9 @@ wipe_device() {
   [[ "$serial" == "$EXPECTED_SERIAL" ]] || die "Serial changed before wipe."
   for name in 01_initial 02_after_deletion 03_pre_wipe_repeat; do
     [[ -s "$IMAGE_DIR/$name.img" && -s "$HASH_DIR/$name.sha256" ]] || die "Missing pre-wipe image or hash: $name"
-    sha256sum -c "$HASH_DIR/$name.sha256"
+    capture "VERIFY_PREWIPE_$name" sha256sum -c "$HASH_DIR/$name.sha256"
   done
-  sudo blockdev --setrw "$DEV"
+  capture S19_ENABLE_WRITES_FOR_WIPE sudo blockdev --setrw "$DEV"
   [[ "$(sudo blockdev --getro "$DEV")" == "0" ]] || die "Device is not writable; refusing wipe."
   need_confirmation "Final destructive action: zero all logical sectors on $DEV (serial $serial)." "WIPE-$EXPECTED_SERIAL"
   capture S20_WIPE_OPERATION sudo docker run --rm --network none --read-only --cap-drop ALL \
