@@ -12,6 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Bash syntax
-        run: bash -n scripts/usb-forensics
+        run: |
+          bash -n scripts/usb-forensics
+          bash -n scripts/check-syntax.sh
+          bash -n tests/shellcheck-guardrails.sh
       - name: Non-destructive guardrails
         run: bash tests/shellcheck-guardrails.sh
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/usb-forensics scripts/check-syntax.sh tests/shellcheck-guardrails.sh
+      - name: Build tools image
+        run: docker build --pull -t usb-forensics-tools:ci .
+      - name: Smoke-test container command execution
+        run: |
+          docker run --rm --network none usb-forensics-tools:ci dc3dd --version
+          docker run --rm --network none usb-forensics-tools:ci /bin/bash -lc 'command -v mmls && command -v fls && command -v tsk_recover'
