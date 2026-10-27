@@ -1,0 +1,17 @@
+name: validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  shell-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: bash -n scripts/usb-forensics
+      - name: Static checks
+        run: bash scripts/check-syntax.sh
