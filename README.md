@@ -7,11 +7,11 @@ Bu depo, çıkarılabilir ortamların adli kopyalanması için USB araçlarını
 Türkçe Android uygulaması ve Bazzite yardımcı araçları: [Shadow Nexus kılavuzu](shadow-nexus/README_TR.md).
 
 ### Android uygulamasını edinme
-1. GitHub deposunda Actions sekmesini açın.
-2. "Android APK derlemesi" iş akışını seçin.
-3. "Run workflow" ile derlemeyi başlatın.
-4. Başarılı çalışmanın altındaki "shadow-nexus-kestrel-debug-apk" yapıtını indirin.
-5. ZIP içinden app-debug.apk dosyasını Android telefona aktarın ve kurun.
+1. GitHub deposunda **Eylemler** sekmesini açın.
+2. **Android APK derlemesi** iş akışını seçin.
+3. **İş akışını çalıştır** düğmesiyle derlemeyi başlatın veya son başarılı derlemeyi açın.
+4. **shadow-nexus-kestrel-debug-apk** adlı dosya paketini indirin.
+5. ZIP içinden app-debug.apk dosyasını çıkarın; Android telefona aktarın ve kurun.
 
 Uygulama Android 10 ve üzerini hedefler. Rehber ve takvim kayıtları Android sistem ekranlarında kullanıcı onayıyla tamamlanır. Eğitim dosyaları ortak depolama alanına kaydedilir.
 
