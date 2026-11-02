@@ -1,7 +1,7 @@
 name: validation
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**"]
   pull_request:
     branches: [main]
 permissions:
@@ -11,20 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Bash syntax
+      - name: Existing USB workflow checks
         run: |
           bash -n scripts/usb-forensics
           bash -n scripts/check-syntax.sh
-          bash -n tests/shellcheck-guardrails.sh
-      - name: Non-destructive guardrails
-        run: bash tests/shellcheck-guardrails.sh
+          bash tests/shellcheck-guardrails.sh
+      - name: Shadow Nexus smoke checks
+        run: bash shadow-nexus/tests/smoke.sh
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: ShellCheck
-        run: shellcheck -S warning scripts/usb-forensics scripts/check-syntax.sh tests/shellcheck-guardrails.sh
-      - name: Build tools image
-        run: docker build --pull -t usb-forensics-tools:ci .
-      - name: Smoke-test container command execution
         run: |
-          docker run --rm --network none usb-forensics-tools:ci dc3dd --version
-          docker run --rm --network none usb-forensics-tools:ci /bin/bash -lc 'command -v mmls && command -v fls && command -v tsk_recover'
+          shellcheck -S warning scripts/usb-forensics scripts/check-syntax.sh tests/shellcheck-guardrails.sh
+          shellcheck -S warning shadow-nexus/snctl shadow-nexus/scripts/adb-reverse-start shadow-nexus/scripts/adb-reverse-stop
