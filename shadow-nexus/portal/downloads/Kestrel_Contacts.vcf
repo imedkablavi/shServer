@@ -1,0 +1,24 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Kestrel Training - Maya Reed
+N:Reed;Maya;;;
+ORG:Kestrel Training Lab
+TEL;TYPE=CELL:+905550000101
+NOTE:SYNTHETIC TRAINING CONTACT - fictional identity; test-only number
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Kestrel Training - Omar Vale
+N:Vale;Omar;;;
+ORG:Kestrel Training Lab
+TEL;TYPE=CELL:+905550000102
+NOTE:SYNTHETIC TRAINING CONTACT - fictional identity; test-only number
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Kestrel Training - Lina North
+N:North;Lina;;;
+ORG:Kestrel Training Lab
+TEL;TYPE=CELL:+905550000103
+NOTE:SYNTHETIC TRAINING CONTACT - fictional identity; test-only number
+END:VCARD
