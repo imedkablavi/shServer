@@ -1,14 +1,34 @@
-# shServer
+# shServer ve Shadow Nexus Laboratuvarı
 
-## Shadow Nexus Evidence Lab
+Bu depo, çıkarılabilir ortamların adli kopyalanması için USB araçlarını ve ayrı bir Android eğitim modülünü içerir.
 
-Arabic-first, non-destructive training workflow for Operation Kestrel on Bazzite Linux. See [Shadow Nexus guide](shadow-nexus/README_AR.md).
+## Shadow Nexus — Operasyon Kestrel
 
-Start with:
+Türkçe Android uygulaması ve Bazzite yardımcı araçları: [Shadow Nexus kılavuzu](shadow-nexus/README_TR.md).
+
+### Android uygulamasını edinme
+1. GitHub deposunda Actions sekmesini açın.
+2. "Android APK derlemesi" iş akışını seçin.
+3. "Run workflow" ile derlemeyi başlatın.
+4. Başarılı çalışmanın altındaki "shadow-nexus-kestrel-debug-apk" yapıtını indirin.
+5. ZIP içinden app-debug.apk dosyasını Android telefona aktarın ve kurun.
+
+Uygulama Android 10 ve üzerini hedefler. Rehber ve takvim kayıtları Android sistem ekranlarında kullanıcı onayıyla tamamlanır. Eğitim dosyaları ortak depolama alanına kaydedilir.
+
+## Bazzite yardımcı komutları
 ```bash
-./shadow-nexus/snctl doctor
-./shadow-nexus/snctl device-info
-./shadow-nexus/snctl case-init
+bash shadow-nexus/snctl yardim
+bash shadow-nexus/snctl denetle
+bash shadow-nexus/snctl cihaz-bilgisi
+bash shadow-nexus/snctl vaka-olustur
+bash shadow-nexus/snctl portal-baslat
 ```
 
-The USB acquisition workflow remains separate. Do not run it for phone evidence.
+## Ayrı tutulan USB iş akışı
+Mevcut scripts/usb-forensics aracı telefon eğitim modülünden bağımsızdır. Bu araç hedef USB sürücüyü yeniden biçimlendirme ve silme adımları içerir; Shadow Nexus için çalıştırılmamalıdır. Kendi yönergeleri ve açık onayları olmadan başlatmayın.
+
+## Kanıt sınıflandırması
+- GERÇEK-LAB-ETKİNLİĞİ: cihazda veya yerel sunucuda fiilen gözlenen etkinlik.
+- SENTETİK-SENARYO: kurgusal eğitim kişileri, olayları ve belgeleri.
+- DIŞ-KAYNAK: lisansı ve kaynağı kaydedilmiş, dışarıdan alınan materyal.
+- ÇIKARILAN-KANIT: yalnızca Oxygen raporunda gerçekten görülen kayıt.

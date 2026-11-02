@@ -1,7 +1,7 @@
-# Manifests
+# Özet Dosyaları
 
-Generated case-specific inventories and SHA-256 manifests are written under `cases/<case-id>/`.
+Vaka başına envanter ve SHA-256 listeleri cases/<vaka-kodu>/ozetler/ altında oluşturulur.
 
-Do not commit actual device identifiers, private phone numbers, user records, Oxygen extraction exports, or private screenshots. Use redacted training copies only.
+Gerçek cihaz tanımlayıcılarını, özel telefon numaralarını, kullanıcı kayıtlarını, Oxygen çıkarım dosyalarını veya özel ekran görüntülerini herkese açık depoya eklemeyin. Yalnızca kişisel bilgileri temizlenmiş eğitim kopyalarını kullanın.
 
-A hash verifies file-byte integrity relative to a recorded digest; it does not prove origin or chain of custody by itself.
+Özet değeri dosya baytlarının kayıtlı özetle aynı olduğunu doğrular; tek başına kaynağı veya eksiksiz kanıt zincirini kanıtlamaz.

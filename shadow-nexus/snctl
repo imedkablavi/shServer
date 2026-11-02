@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$ROOT/.." && pwd)"
+CASE_ID="${SN_CASE_ID:-SNX-20261103-KESTREL-ADDON}"
+CASE_DIR="$ROOT/cases/$CASE_ID"
+PORT="${SN_PORT:-34871}"
+PID_FILE="$ROOT/portal/.runtime/portal.pid"
+LOG_FILE="$CASE_DIR/logs/portal-erisim-kaydi.jsonl"
+
+hata(){ printf 'HATA: %s\n' "$*" >&2; exit 1; }
+gerekli(){ command -v "$1" >/dev/null 2>&1 || hata "Gerekli komut bulunamadı: $1"; }
+
+yardim(){
+cat <<'EOF'
+Shadow Nexus — Bazzite denetim komutları
+
+  bash shadow-nexus/snctl yardim
+  bash shadow-nexus/snctl denetle
+  bash shadow-nexus/snctl cihaz-bilgisi
+  bash shadow-nexus/snctl vaka-olustur
+  bash shadow-nexus/snctl durum
+  bash shadow-nexus/snctl ozet-hash
+  bash shadow-nexus/snctl hash-dogrula
+  bash shadow-nexus/snctl portal-baslat
+  bash shadow-nexus/snctl portal-durdur
+
+ADB ters bağlantısı:
+  bash shadow-nexus/scripts/adb-ters-baglantiyi-baslat
+  bash shadow-nexus/scripts/adb-ters-baglantiyi-durdur
+EOF
+}
+
+denetle(){
+  local komut
+  printf 'İşletim sistemi: '
+  . /etc/os-release
+  printf '%s %s\n' "${NAME:-bilinmiyor}" "${VERSION_ID:-}"
+  for komut in bash python3 adb sha256sum curl; do
+    if command -v "$komut" >/dev/null 2>&1; then
+      printf '[TAMAM] %-12s %s\n' "$komut" "$(command -v "$komut")"
+    else
+      printf '[EKSIK] %s\n' "$komut"
+    fi
+  done
+  python3 -c 'import http.server, json, pathlib' && echo '[TAMAM] Python standart kitaplıkları'
+  if command -v adb >/dev/null 2>&1; then
+    printf '\nBağlı Android cihazları:\n'
+    adb devices -l
+  fi
+}
+
+cihaz_bilgisi(){
+  gerekli adb
+  local seri
+  seri="$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
+  [[ -n "$seri" ]] || hata "Yetkilendirilmiş ADB cihazı bulunamadı. Telefonu USB ile bağlayın, ekran kilidini açın ve USB hata ayıklama isteğini onaylayın."
+  printf 'Cihaz üreticisi: '; adb -s "$seri" shell getprop ro.product.manufacturer
+  printf 'Cihaz modeli: '; adb -s "$seri" shell getprop ro.product.model
+  printf 'Cihaz kodu: '; adb -s "$seri" shell getprop ro.product.device
+  printf 'Android sürümü: '; adb -s "$seri" shell getprop ro.build.version.release
+  printf 'Android API: '; adb -s "$seri" shell getprop ro.build.version.sdk
+  printf 'Derleme parmak izi: '; adb -s "$seri" shell getprop ro.build.fingerprint
+  echo "Bu denetim yalnızca okuma yaptı; telefona veri yazılmadı."
+}
+
+vaka_olustur(){
+  mkdir -p "$CASE_DIR"/{gunlukler,ozetler,ekran_goruntuleri,notlar,indirmeler}
+  cat > "$CASE_DIR/VAKA_BILGILERI.json" <<EOF
+{
+  "vaka_kodu": "$CASE_ID",
+  "senaryo": "Operasyon Kestrel",
+  "siniflandirma": "KARMA EGITIM VAKASI",
+  "olusturma_utc": "$(date -u +%FT%TZ)",
+  "cihaz_etkinligi": "HENUZ GERCEKLESTIRILMEDI",
+  "sentetik_icerik": true,
+  "onceki_vaka": "SNX-20261101-043455 - DEGISTIRILMEDI"
+}
+EOF
+  cat > "$CASE_DIR/ozetler/kanit_envanteri.csv" <<'EOF'
+ogeno,siniflandirma,kaynak,aciklama,gozlem_utc,sha256,not
+EOF
+  printf 'Yeni eğitim vakası oluşturuldu: %s\n' "$CASE_DIR"
+}
+
+durum(){
+  [[ -d "$CASE_DIR" ]] || hata "Önce vaka oluşturun: bash shadow-nexus/snctl vaka-olustur"
+  find "$CASE_DIR" -maxdepth 3 -type f -printf '%P (%s bayt)\n' | sort
+  if [[ -f "$LOG_FILE" ]]; then
+    printf '\nPortal erişim günlüğünün son kayıtları:\n'
+    tail -n 10 "$LOG_FILE"
+  fi
+}
+
+ozet_hash(){
+  [[ -d "$CASE_DIR" ]] || hata "Önce vaka oluşturun."
+  mkdir -p "$CASE_DIR/ozetler"
+  find "$ROOT/portal" -type f -not -path '*/.runtime/*' -print0 |
+    sort -z | xargs -0 -r sha256sum > "$CASE_DIR/ozetler/PORTAL_SHA256SUMS.txt"
+  (
+    cd "$CASE_DIR"
+    find gunlukler notlar ozetler indirmeler -type f ! -name '*SHA256SUMS.txt' -print0 |
+      sort -z | xargs -0 -r sha256sum > ozetler/VAKA_SHA256SUMS.txt
+  )
+  echo "SHA-256 özetleri oluşturuldu: $CASE_DIR/ozetler"
+}
+
+hash_dogrula(){
+  [[ -s "$CASE_DIR/ozetler/PORTAL_SHA256SUMS.txt" ]] || hata "Portal özeti bulunamadı. Önce ozet-hash komutunu çalıştırın."
+  (cd "$REPO_ROOT" && sha256sum -c "$CASE_DIR/ozetler/PORTAL_SHA256SUMS.txt")
+  if [[ -s "$CASE_DIR/ozetler/VAKA_SHA256SUMS.txt" ]]; then
+    (cd "$CASE_DIR" && sha256sum -c ozetler/VAKA_SHA256SUMS.txt)
+  fi
+}
+
+portal_baslat(){
+  gerekli python3
+  [[ -d "$CASE_DIR" ]] || hata "Önce vaka oluşturun: bash shadow-nexus/snctl vaka-olustur"
+  mkdir -p "$(dirname "$PID_FILE")" "$CASE_DIR/gunlukler"
+  if [[ -f "$PID_FILE" ]]; then
+    local onceki
+    onceki="$(cat "$PID_FILE")"
+    if kill -0 "$onceki" 2>/dev/null; then hata "Portal zaten çalışıyor. İşlem numarası: $onceki"; else rm -f "$PID_FILE"; fi
+  fi
+  export SN_PORTAL_ROOT="$ROOT/portal" SN_PORT="$PORT" SN_ACCESS_LOG="$LOG_FILE"
+  nohup python3 "$ROOT/portal/server.py" > "$CASE_DIR/gunlukler/portal-konsol.log" 2>&1 &
+  echo $! > "$PID_FILE"
+  sleep 1
+  if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    cat "$CASE_DIR/gunlukler/portal-konsol.log"
+    rm -f "$PID_FILE"
+    hata "Portal başlatılamadı."
+  fi
+  printf 'Portal hazır: http://127.0.0.1:%s/\n' "$PORT"
+  echo "Telefon bağlantısı için ayrı komut:"
+  echo "bash shadow-nexus/scripts/adb-ters-baglantiyi-baslat"
+}
+
+portal_durdur(){
+  if [[ -f "$PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$PID_FILE")"
+    kill "$pid" 2>/dev/null || true
+    rm -f "$PID_FILE"
+    echo "Portalın durdurulması istendi."
+  else
+    echo "Çalışan portal kaydı bulunamadı."
+  fi
+}
+
+case "${1:-yardim}" in
+  yardim) yardim;;
+  denetle) denetle;;
+  cihaz-bilgisi) cihaz_bilgisi;;
+  vaka-olustur) vaka_olustur;;
+  durum) durum;;
+  ozet-hash) ozet_hash;;
+  hash-dogrula) hash_dogrula;;
+  portal-baslat) portal_baslat;;
+  portal-durdur) portal_durdur;;
+  *) yardim; hata "Bilinmeyen komut: $1";;
+esac

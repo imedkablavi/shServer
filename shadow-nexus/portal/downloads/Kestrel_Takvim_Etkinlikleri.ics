@@ -1,0 +1,21 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Shadow Nexus//Kestrel Egitim//TR
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:kestrel-egitim-inceleme@shadow-nexus.invalid
+DTSTAMP:20261103T000000Z
+DTSTART:20261110T090000Z
+DTEND:20261110T093000Z
+SUMMARY:Kestrel eğitim incelemesi (kurgusal)
+DESCRIPTION:SENTETİK-SENARYO: Yalnızca özel test takvimine aktarın.
+END:VEVENT
+BEGIN:VEVENT
+UID:kestrel-egitim-varlik@shadow-nexus.invalid
+DTSTAMP:20261103T000000Z
+DTSTART:20261110T100000Z
+DTEND:20261110T103000Z
+SUMMARY:Kestrel varlık listesi incelemesi (kurgusal)
+DESCRIPTION:SENTETİK-SENARYO: Gerçek bir randevu değildir.
+END:VEVENT
+END:VCALENDAR

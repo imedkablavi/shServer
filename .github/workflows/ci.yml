@@ -1,4 +1,4 @@
-name: validation
+name: Depo doğrulaması
 on:
   push:
     branches: [main, "feature/**"]
@@ -6,21 +6,30 @@ on:
     branches: [main]
 permissions:
   contents: read
+
 jobs:
-  shell-check:
+  betik-denetimi:
+    name: Betik ve eğitim verisi denetimi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Existing USB workflow checks
+      - name: Depoyu indir
+        uses: actions/checkout@v4
+      - name: USB araçlarının sözdizimini denetle
         run: |
           bash -n scripts/usb-forensics
           bash -n scripts/check-syntax.sh
-          bash tests/shellcheck-guardrails.sh
-      - name: Shadow Nexus smoke checks
+          bash -n tests/shellcheck-guardrails.sh
+      - name: Shadow Nexus sözdizimi ve içerik testleri
         run: bash shadow-nexus/tests/smoke.sh
-      - name: Install ShellCheck
+      - name: ShellCheck kur
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-      - name: ShellCheck
+      - name: Kabuk betiklerini incele
         run: |
           shellcheck -S warning scripts/usb-forensics scripts/check-syntax.sh tests/shellcheck-guardrails.sh
-          shellcheck -S warning shadow-nexus/snctl shadow-nexus/scripts/adb-reverse-start shadow-nexus/scripts/adb-reverse-stop
+          shellcheck -S warning shadow-nexus/snctl shadow-nexus/scripts/adb-ters-baglantiyi-baslat shadow-nexus/scripts/adb-ters-baglantiyi-durdur shadow-nexus/tests/smoke.sh
+      - name: USB araç imajını oluştur
+        run: docker build --pull -t usb-forensics-tools:ci .
+      - name: USB araçlarını salt ağsız ortamda doğrula
+        run: |
+          docker run --rm --network none usb-forensics-tools:ci dc3dd --version
+          docker run --rm --network none usb-forensics-tools:ci /bin/bash -lc 'command -v mmls && command -v fls && command -v tsk_recover'

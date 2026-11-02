@@ -1,0 +1,9 @@
+SINIFLANDIRMA: SENTETİK-SENARYO
+VAKA: Operasyon Kestrel
+BELGE: Denetim Notları
+
+Bu eğitim belgesindeki tüm kişiler, kurumlar, varlıklar ve olaylar kurgusaldır.
+
+Kestrel eğitim ekibi, ekipman hareket kaydı ile devir belgesi arasında tutarsızlık bulunduğu varsayımına dayalı bir senaryo hazırlamıştır. Katılımcılar varlık listesini, devir kaydını ve cihazdan gerçekten elde edilen izleri ayrı ayrı incelemelidir.
+
+Bu dosya sentetik eğitim içeriğidir; gerçek olay kaydı değildir.
