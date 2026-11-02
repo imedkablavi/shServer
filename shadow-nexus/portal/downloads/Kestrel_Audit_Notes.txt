@@ -1,9 +1,0 @@
-CLASSIFICATION: SYNTHETIC-SCENARIO
-CASE: Operation Kestrel
-Document: Audit Notes
-All people, company names, references and figures below are fictional.
-
-Audit note:
-The Kestrel training team identified a mismatch between an equipment movement entry and a transfer receipt. Trainees should compare the asset register and transfer record, then build a timeline from independently acquired device artifacts.
-
-This text file is a generated training document. Its filesystem timestamps reflect creation/download activity, not the fictional dates in the scenario.

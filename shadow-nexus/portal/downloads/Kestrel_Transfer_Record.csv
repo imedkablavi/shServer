@@ -1,4 +1,0 @@
-classification,transfer_ref,asset_id,origin,destination,record_status
-SYNTHETIC-SCENARIO,TR-K-204,KST-1001,Warehouse A,Lab C,Received
-SYNTHETIC-SCENARIO,TR-K-205,KST-1002,Warehouse A,Lab C,Pending review
-SYNTHETIC-SCENARIO,TR-K-206,KST-1003,Warehouse B,Lab C,Received
