@@ -1,0 +1,5 @@
+classification,event_id,scenario_order,event_description
+SYNTHETIC-SCENARIO,EV-001,1,Audit discrepancy recorded in training brief
+SYNTHETIC-SCENARIO,EV-002,2,Asset register reviewed
+SYNTHETIC-SCENARIO,EV-003,3,Transfer record requested
+SYNTHETIC-SCENARIO,EV-004,4,Supporting notes collected
