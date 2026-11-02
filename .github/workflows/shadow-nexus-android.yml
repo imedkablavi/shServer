@@ -28,6 +28,8 @@ jobs:
           java-version: "17"
       - name: Android SDK hazırla
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - name: Android 35 araçlarını kur
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Gradle 8.9 hazırla
