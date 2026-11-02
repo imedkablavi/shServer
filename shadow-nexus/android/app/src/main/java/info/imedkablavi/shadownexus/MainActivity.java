@@ -23,7 +23,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.OutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -33,8 +37,7 @@ import java.util.TimeZone;
 
 public class MainActivity extends Activity {
     private final ArrayList<String> activityEvents = new ArrayList<>();
-    private LinearLayout content;
-    private static final String PORTAL_URL = "http://127.0.0.1:34871/";
+        private static final String PORTAL_URL = "http://127.0.0.1:34871/";
 
     private static class TrainingContact {
         final String name;
@@ -49,11 +52,11 @@ public class MainActivity extends Activity {
     }
 
     private final TrainingContact[] contacts = new TrainingContact[] {
-        new TrainingContact("Maya Reed", "Kestrel Eğitim Laboratuvarı",
+        new TrainingContact("Kestrel Eğitim - Maya Reed", "Kestrel Eğitim Laboratuvarı",
             "SENTETİK-SENARYO: Tamamen kurgusal eğitim kişisi."),
-        new TrainingContact("Omar Vale", "Kestrel Eğitim Laboratuvarı",
+        new TrainingContact("Kestrel Eğitim - Omar Vale", "Kestrel Eğitim Laboratuvarı",
             "SENTETİK-SENARYO: Tamamen kurgusal eğitim kişisi."),
-        new TrainingContact("Lina North", "Kestrel Eğitim Laboratuvarı",
+        new TrainingContact("Kestrel Eğitim - Lina North", "Kestrel Eğitim Laboratuvarı",
             "SENTETİK-SENARYO: Tamamen kurgusal eğitim kişisi.")
     };
 
@@ -363,7 +366,17 @@ public class MainActivity extends Activity {
     private void exportActivityLog() {
         recordEvent("ETKINLIK_KAYDI_DISA_AKTARMA_ISTEGI", "Kullanıcı etkinlik günlüğünü dışa aktarmayı başlattı.");
         StringBuilder data = new StringBuilder();
-        for (String event : activityEvents) data.append(event).append("\n");
+        File savedLog = new File(getFilesDir(), "kestrel-etkinlik-kaydi.jsonl");
+        try {
+            if (savedLog.isFile()) {
+                data.append(new String(Files.readAllBytes(savedLog.toPath()), StandardCharsets.UTF_8));
+            } else {
+                for (String event : activityEvents) data.append(event).append("\n");
+            }
+        } catch (IOException ex) {
+            showMessage("Önceki etkinlik günlüğü okunamadı: " + ex.getMessage());
+            return;
+        }
         String name = "Kestrel_Etkinlik_Kaydi_" +
             new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date()) + ".jsonl";
         try {
@@ -381,9 +394,16 @@ public class MainActivity extends Activity {
         }}.format(new Date());
         String safe = detail.replace("\\", "\\\\").replace("\"", "\\\"")
             .replace("\n", " ").replace("\r", " ");
-        activityEvents.add("{\"gerceklesme_utc\":\"" + utc +
+        String record = "{\"gerceklesme_utc\":\"" + utc +
             "\",\"siniflandirma\":\"GERÇEK-LAB-ETKİNLİĞİ\",\"olay\":\"" + type +
-            "\",\"aciklama\":\"" + safe + "\"}");
+            "\",\"aciklama\":\"" + safe + "\"}";
+        activityEvents.add(record);
+        try (FileOutputStream output = new FileOutputStream(
+                new File(getFilesDir(), "kestrel-etkinlik-kaydi.jsonl"), true)) {
+            output.write((record + "\\n").getBytes(StandardCharsets.UTF_8));
+        } catch (IOException ignored) {
+            // Günlük dışa aktarma düğmesi, mevcut oturum belleğindeki kayıtları yine dışa aktarabilir.
+        }
     }
 
     private String auditNotes() {
