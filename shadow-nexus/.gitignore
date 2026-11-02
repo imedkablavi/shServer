@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+portal/.runtime/
+cases/*/logs/*
+cases/*/hashes/*
+cases/*/screenshots/*
+cases/*/reports/extraction/*
+*.sqlite
+*.db
+.env
