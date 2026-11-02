@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+PORT="${SN_PORT:-34871}"
+command -v adb >/dev/null || { echo "adb missing" >&2; exit 1; }
+SERIAL="$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
+[[ -n "$SERIAL" ]] || { echo "No authorized ADB device" >&2; exit 1; }
+adb -s "$SERIAL" reverse --remove "tcp:$PORT"
+echo "ADB reverse mapping removed."
