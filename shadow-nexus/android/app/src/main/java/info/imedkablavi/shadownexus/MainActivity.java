@@ -267,7 +267,7 @@ public class MainActivity extends Activity {
             try {
                 saveToDownloads(file[0], file[1], file[2]);
                 saved++;
-                inventory.append(file[0]).append(",SENTETIK-SENARYO,").append(file[1]).append("\n");
+                inventory.append(file[0]).append(",SENTETİK-SENARYO,").append(file[1]).append("\n");
                 recordEvent("DOSYA_KAYDEDILDI", file[0]);
             } catch (Exception ex) {
                 recordEvent("DOSYA_KAYIT_HATASI", file[0] + ": " + ex);
@@ -285,10 +285,10 @@ public class MainActivity extends Activity {
 
     private Uri saveToDownloads(String name, String mime, String data) throws Exception {
         ContentValues values = new ContentValues();
-        values.put(MediaStore.Downloads.DISPLAY_NAME, name);
-        values.put(MediaStore.Downloads.MIME_TYPE, mime);
-        values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ShadowNexus-Kestrel");
-        values.put(MediaStore.Downloads.IS_PENDING, 1);
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        values.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ShadowNexus-Kestrel");
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
         Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
         if (uri == null) throw new IllegalStateException("Dosya kaydı için Android depolama alanı satırı oluşturulamadı.");
         try (OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
@@ -296,7 +296,7 @@ public class MainActivity extends Activity {
             output.write(data.getBytes(StandardCharsets.UTF_8));
         }
         ContentValues ready = new ContentValues();
-        ready.put(MediaStore.Downloads.IS_PENDING, 0);
+        ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
         getContentResolver().update(uri, ready, null, null);
         return uri;
     }
@@ -334,10 +334,10 @@ public class MainActivity extends Activity {
         String name = "Kestrel_Sentetik_Egitim_Gorseli_" +
             new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date()) + ".png";
         ContentValues values = new ContentValues();
-        values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ShadowNexus-Kestrel");
-        values.put(MediaStore.Images.Media.IS_PENDING, 1);
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        values.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ShadowNexus-Kestrel");
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
         Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
         if (uri == null) {
             bitmap.recycle();
@@ -348,7 +348,7 @@ public class MainActivity extends Activity {
             if (output == null) throw new IllegalStateException("Görsel akışı açılamadı.");
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
             ContentValues ready = new ContentValues();
-            ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+            ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
             getContentResolver().update(uri, ready, null, null);
             recordEvent("SENTETIK_GORSEL_KAYDEDILDI", name);
             showMessage("Filigranlı eğitim görseli Galeri'ye kaydedildi.");
@@ -361,6 +361,7 @@ public class MainActivity extends Activity {
     }
 
     private void exportActivityLog() {
+        recordEvent("ETKINLIK_KAYDI_DISA_AKTARMA_ISTEGI", "Kullanıcı etkinlik günlüğünü dışa aktarmayı başlattı.");
         StringBuilder data = new StringBuilder();
         for (String event : activityEvents) data.append(event).append("\n");
         String name = "Kestrel_Etkinlik_Kaydi_" +
@@ -386,35 +387,35 @@ public class MainActivity extends Activity {
     }
 
     private String auditNotes() {
-        return "SINIFLANDIRMA: SENTETIK-SENARYO\n" +
+        return "SINIFLANDIRMA: SENTETİK-SENARYO\n" +
             "VAKA: Operasyon Kestrel\n" +
-            "BELGE: Denetim Notlari\n\n" +
-            "Bu egitim belgesindeki tum kisi, kurum, varlik ve olaylar kurgusaldir.\n" +
-            "Kestrel eğitim ekibi, ekipman hareket kaydi ile devir belgesi arasinda tutarsızlık senaryosu tanimlamistir.\n" +
-            "Katılımcılar varlık listesini, devir kaydını ve cihazdan gercekten elde edilen izleri ayrı ayrı incelemelidir.\n\n" +
+            "BELGE: Denetim Notları\n\n" +
+            "Bu eğitim belgesindeki tüm kişiler, kurumlar, varlıklar ve olaylar kurgusaldır.\n" +
+            "Kestrel eğitim ekibi, ekipman hareket kaydı ile devir belgesi arasında tutarsızlık senaryosu tanımlamıştır.\n" +
+            "Katılımcılar varlık listesini, devir kaydını ve cihazdan gerçekten elde edilen izleri ayrı ayrı incelemelidir.\n\n" +
             "Bu dosya sentetik eğitim içeriğidir; gerçek olay kaydı değildir.\n";
     }
 
     private String assetRegister() {
         return "siniflandirma,varlik_kodu,aciklama,kayit_konumu,durum\n" +
-            "SENTETIK-SENARYO,KST-1001,Tasinabilir goruntuleme kiti,Depo A,Kayitli\n" +
-            "SENTETIK-SENARYO,KST-1002,Ag test cantasi,Depo A,Incelemede\n" +
-            "SENTETIK-SENARYO,KST-1003,Saha bilgisayari cantasi,Depo B,Kayitli\n";
+            "SENTETİK-SENARYO,KST-1001,Taşınabilir görüntüleme kiti,Depo A,Kayıtlı\n" +
+            "SENTETİK-SENARYO,KST-1002,Ağ test çantası,Depo A,İncelemede\n" +
+            "SENTETİK-SENARYO,KST-1003,Saha bilgisayarı çantası,Depo B,Kayıtlı\n";
     }
 
     private String transferRecord() {
         return "siniflandirma,devir_no,varlik_kodu,kaynak,hedef,durum\n" +
-            "SENTETIK-SENARYO,TR-K-204,KST-1001,Depo A,Laboratuvar C,Teslim alindi\n" +
-            "SENTETIK-SENARYO,TR-K-205,KST-1002,Depo A,Laboratuvar C,Inceleme bekliyor\n" +
-            "SENTETIK-SENARYO,TR-K-206,KST-1003,Depo B,Laboratuvar C,Teslim alindi\n";
+            "SENTETİK-SENARYO,TR-K-204,KST-1001,Depo A,Laboratuvar C,Teslim alındı\n" +
+            "SENTETİK-SENARYO,TR-K-205,KST-1002,Depo A,Laboratuvar C,İnceleme bekliyor\n" +
+            "SENTETİK-SENARYO,TR-K-206,KST-1003,Depo B,Laboratuvar C,Teslim alındı\n";
     }
 
     private String scenarioTimeline() {
         return "siniflandirma,senaryo_sirasi,olay\n" +
-            "SENTETIK-SENARYO,1,Egitim denetiminde tutarsizlik tanimlandi\n" +
-            "SENTETIK-SENARYO,2,Varlik listesi incelendi\n" +
-            "SENTETIK-SENARYO,3,Devir kaydi talep edildi\n" +
-            "SENTETIK-SENARYO,4,Destekleyici notlar toplandi\n";
+            "SENTETİK-SENARYO,1,Eğitim denetiminde tutarsızlık tanımlandı\n" +
+            "SENTETİK-SENARYO,2,Varlık listesi incelendi\n" +
+            "SENTETİK-SENARYO,3,Devir kaydı talep edildi\n" +
+            "SENTETİK-SENARYO,4,Destekleyici notlar toplandı\n";
     }
 
     private String contactCards() {
@@ -444,8 +445,8 @@ public class MainActivity extends Activity {
             "DTSTAMP:" + format.format(new Date()) + "\r\n" +
             "DTSTART:" + format.format(start.getTime()) + "\r\n" +
             "DTEND:" + format.format(end.getTime()) + "\r\n" +
-            "SUMMARY:Kestrel egitim incelemesi\r\n" +
-            "DESCRIPTION:SENTETIK-SENARYO; kurgusal egitim etkinligi\r\n" +
+            "SUMMARY:Kestrel eğitim incelemesi\r\n" +
+            "DESCRIPTION:SENTETİK-SENARYO; kurgusal eğitim etkinliği\r\n" +
             "END:VEVENT\r\nEND:VCALENDAR\r\n";
     }
 
