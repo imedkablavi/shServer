@@ -1,0 +1,4 @@
+classification,asset_id,description,registered_location,status
+SYNTHETIC-SCENARIO,KST-1001,Portable imaging kit,Warehouse A,Recorded
+SYNTHETIC-SCENARIO,KST-1002,Network test case,Warehouse A,Under review
+SYNTHETIC-SCENARIO,KST-1003,Field laptop case,Warehouse B,Recorded
