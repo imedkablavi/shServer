@@ -5,15 +5,15 @@ Operasyon Kestrel için açıkça sentetik olarak işaretlenmiş eğitim materya
 
 ## Gereksinimler
 - Android 10 veya üzeri.
-- APK, GitHub Actions derleme iş akışı tarafından oluşturulur.
+- APK, GitHub otomatik derleme iş akışı tarafından oluşturulur.
 - Kişi ekleme ve takvim işlemleri Android'in kendi onay ekranlarında kullanıcı tarafından kaydedilir.
 - Eğitim dosyaları ortak İndirilenler alanına, görsel ise Resimler alanına kaydedilir.
 
 ## APK indirme
-1. GitHub deposunda Actions sekmesini açın.
-2. "Android APK derlemesi" iş akışını seçin.
-3. "Run workflow" düğmesine basın veya son başarılı derlemeyi açın.
-4. "shadow-nexus-kestrel-debug-apk" adlı yapıtı indirin.
+1. GitHub deposunda **Eylemler** sekmesini açın.
+2. **Android APK derlemesi** iş akışını seçin.
+3. **İş akışını çalıştır** düğmesine basın veya son başarılı derlemeyi açın.
+4. **shadow-nexus-kestrel-debug-apk** adlı dosya paketini indirin.
 5. ZIP arşivinden app-debug.apk dosyasını çıkarın.
 6. APK dosyasını telefona aktarın ve Android kurulum ekranında onaylayın.
 
