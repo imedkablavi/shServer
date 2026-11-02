@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$ROOT/.." && pwd)"
+CASE_ID="${SN_CASE_ID:-SNX-20261103-KESTREL-ADDON}"
+CASE_DIR="$ROOT/cases/$CASE_ID"
+PORT="${SN_PORT:-34871}"
+PID_FILE="$ROOT/portal/.runtime/portal.pid"
+LOG_FILE="$CASE_DIR/logs/portal-access.jsonl"
+
+die(){ printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+need(){ command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"; }
+usage(){
+cat <<'EOF'
+Shadow Nexus control (Bazzite)
+  snctl help
+  snctl doctor
+  snctl device-info
+  snctl case-init
+  snctl case-status
+  snctl hash
+  snctl verify
+  snctl portal-start
+  snctl portal-stop
+EOF
+}
+doctor(){
+  local cmd
+  printf '%-16s %s\n' "OS" "$(grep -E '^NAME=|^VERSION=' /etc/os-release | tr '\n' ' ')"
+  for cmd in bash python3 adb sha256sum curl; do
+    if command -v "$cmd" >/dev/null 2>&1; then printf '[OK] %s: %s\n' "$cmd" "$(command -v "$cmd")"; else printf '[MISSING] %s\n' "$cmd"; fi
+  done
+  python3 -c 'import http.server, json, pathlib' && echo '[OK] Python stdlib modules'
+  if command -v adb >/dev/null 2>&1; then adb devices -l; fi
+}
+device_info(){
+  need adb
+  adb devices -l
+  local serial
+  serial="$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
+  [[ -n "$serial" ]] || die "No authorized ADB device. Connect USB, unlock phone, approve debugging, then retry."
+  printf '\nDevice properties (read-only):\n'
+  adb -s "$serial" shell getprop ro.product.manufacturer
+  adb -s "$serial" shell getprop ro.product.model
+  adb -s "$serial" shell getprop ro.product.device
+  adb -s "$serial" shell getprop ro.build.version.release
+  adb -s "$serial" shell getprop ro.build.version.sdk
+  adb -s "$serial" shell getprop ro.build.fingerprint
+  printf '\nNo data was written to the device.\n'
+}
+case_init(){
+  mkdir -p "$CASE_DIR"/{logs,hashes,manifests,notes,screenshots,downloads}
+  cat > "$CASE_DIR/CASE_METADATA.json" <<EOF
+{
+  "case_id": "$CASE_ID",
+  "scenario": "Operation Kestrel",
+  "classification": "MIXED TRAINING CASE",
+  "created_utc": "$(date -u +%FT%TZ)",
+  "device_activity": "NOT YET EXECUTED",
+  "synthetic_content": true,
+  "source_case_untouched": "SNX-20261101-043455"
+}
+EOF
+  cat > "$CASE_DIR/manifests/evidence_inventory.csv" <<'EOF'
+item_id,classification,source,description,observed_utc,sha256,notes
+EOF
+  printf 'Initialized add-on case: %s\n' "$CASE_DIR"
+}
+status(){
+  [[ -d "$CASE_DIR" ]] || die "Case not initialized. Run: snctl case-init"
+  find "$CASE_DIR" -maxdepth 3 -type f -printf '%P (%s bytes)\n' | sort
+  [[ -f "$LOG_FILE" ]] && { echo; echo "Portal log:"; tail -n 10 "$LOG_FILE"; } || true
+}
+hash_files(){
+  [[ -d "$CASE_DIR" ]] || die "Case not initialized."
+  mkdir -p "$CASE_DIR/hashes"
+  find "$ROOT/portal" -type f -not -path '*/.runtime/*' -print0 | sort -z | xargs -0 -r sha256sum > "$CASE_DIR/hashes/PORTAL_SHA256SUMS.txt"
+  (cd "$CASE_DIR" && find logs notes manifests downloads -type f ! -path 'hashes/*' -print0 | sort -z | xargs -0 -r sha256sum > hashes/CASE_SHA256SUMS.txt)
+  echo "Hashes written under $CASE_DIR/hashes"
+}
+verify(){
+  [[ -s "$CASE_DIR/hashes/PORTAL_SHA256SUMS.txt" ]] || die "Portal manifest missing; run snctl hash"
+  (cd "$REPO_ROOT" && sha256sum -c "$CASE_DIR/hashes/PORTAL_SHA256SUMS.txt")
+  [[ ! -s "$CASE_DIR/hashes/CASE_SHA256SUMS.txt" ]] || (cd "$CASE_DIR" && sha256sum -c hashes/CASE_SHA256SUMS.txt)
+}
+portal_start(){
+  need python3
+  mkdir -p "$(dirname "$PID_FILE")" "$CASE_DIR/logs"
+  [[ ! -f "$PID_FILE" ]] || { kill -0 "$(cat "$PID_FILE")" 2>/dev/null && die "Portal already running (PID $(cat "$PID_FILE"))." || rm -f "$PID_FILE"; }
+  export SN_PORTAL_ROOT="$ROOT/portal" SN_PORT="$PORT" SN_ACCESS_LOG="$LOG_FILE"
+  nohup python3 "$ROOT/portal/server.py" > "$CASE_DIR/logs/portal-console.log" 2>&1 &
+  echo $! > "$PID_FILE"
+  sleep 1
+  kill -0 "$(cat "$PID_FILE")" 2>/dev/null || { cat "$CASE_DIR/logs/portal-console.log"; rm -f "$PID_FILE"; die "Portal failed to start"; }
+  printf 'Portal listening on http://127.0.0.1:%s/\n' "$PORT"
+  printf 'Phone URL: http://127.0.0.1:%s/ (requires adb reverse)\n' "$PORT"
+  printf 'Stop: ./shadow-nexus/snctl portal-stop\n'
+}
+portal_stop(){
+  if [[ -f "$PID_FILE" ]]; then
+    local pid; pid="$(cat "$PID_FILE")"
+    kill "$pid" 2>/dev/null || true
+    rm -f "$PID_FILE"
+    echo "Portal stop requested."
+  else echo "Portal is not recorded as running."; fi
+}
+case "${1:-help}" in
+  help|-h|--help) usage;;
+  doctor) doctor;;
+  device-info) device_info;;
+  case-init) case_init;;
+  case-status) status;;
+  hash) hash_files;;
+  verify) verify;;
+  portal-start) portal_start;;
+  portal-stop) portal_stop;;
+  *) usage; die "Unknown command: $1";;
+esac
