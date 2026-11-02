@@ -6,8 +6,10 @@ umask 077
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
 CASE_ID="${SN_CASE_ID:-SNX-20261103-KESTREL-ADDON}"
+[[ "$CASE_ID" =~ ^[A-Za-z0-9._-]+$ ]] || { printf "HATA: Geçersiz vaka kodu.\\n" >&2; exit 1; }
 CASE_DIR="$ROOT/cases/$CASE_ID"
 PORT="${SN_PORT:-34871}"
+[[ "$PORT" =~ ^[0-9]{1,5}$ ]] && (( PORT >= 1024 && PORT <= 65535 )) || { printf "HATA: Bağlantı noktası 1024-65535 arasında bir sayı olmalıdır.\\n" >&2; exit 1; }
 PID_FILE="$ROOT/portal/.runtime/portal.pid"
 LOG_FILE="$CASE_DIR/logs/portal-erisim-kaydi.jsonl"
 
