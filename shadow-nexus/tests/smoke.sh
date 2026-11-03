@@ -122,6 +122,7 @@ assert "Intent.ACTION_SENDTO" in java
 assert "Intent.ACTION_DIAL" in java
 assert "sms_body" in java
 assert "MediaScannerConnection.scanFile" in java
+assert "setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, \"image/*\")" in java
 assert "Deniz Arslan [EĞİTİM]" in java
 assert "Kerem Yılmaz [EĞİTİM]" in java
 assert "Selin Kaya [EĞİTİM]" in java
