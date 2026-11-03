@@ -51,7 +51,7 @@ mapfile -t REMOTE_FILES < <(
     grep -Ei '\.(jpg|jpeg|heic|heif|png|webp)$' |
     sort
 )
-(("${#REMOTE_FILES[@]}" > 0)) || die "Kamera klasöründe desteklenen görüntü dosyası bulunamadı."
+(( ${#REMOTE_FILES[@]} > 0 )) || die "Kamera klasöründe desteklenen görüntü dosyası bulunamadı."
 
 printf '\nKamera klasöründeki görüntü dosyaları:\n'
 for i in "${!REMOTE_FILES[@]}"; do
@@ -71,14 +71,15 @@ for token in "${TOKENS[@]}"; do
   (( index >= 0 && index < ${#REMOTE_FILES[@]} )) || die "Seçim numarası aralık dışında: $token"
   SELECTED[$index]=1
 done
-
-(("${#SELECTED[@]}" > 0)) || die "Seçim boş."
-[[ ! -e "$OUTPUT_DIR" ]] || die "Hedef klasör zaten var; üzerine yazılmadı: $OUTPUT_DIR"
+(( ${#SELECTED[@]} > 0 )) || die "Seçim boş."
 
 printf '\nSeçilen %s fotoğraf kopyalanacak. Kaynaklar silinmeyecek.\n' "${#SELECTED[@]}"
 printf 'Devam etmek için EVET yazın: '
 read -r CONFIRM
 [[ "$CONFIRM" == "EVET" ]] || die "Kullanıcı işlemi iptal etti."
+
+[[ ! -e "$OUTPUT_DIR" ]] || die "Hedef klasör zaten var; üzerine yazılmadı: $OUTPUT_DIR"
+[[ ! -e "$LOG_FILE" ]] || die "Aktarım günlüğü zaten var; üzerine yazılmadı: $LOG_FILE"
 
 DEVICE_MODEL="$("${ADB[@]}" shell getprop ro.product.model | tr -d '\r')"
 ANDROID_VERSION="$("${ADB[@]}" shell getprop ro.build.version.release | tr -d '\r')"
@@ -114,13 +115,14 @@ Dosya sisteminin değiştirilme zamanı tek başına fotoğrafın çekim zamanı
 |---|---:|---|---|---|
 EOF
 
+COPIED=0
 for index in "${!REMOTE_FILES[@]}"; do
   [[ -n "${SELECTED[$index]:-}" ]] || continue
   REMOTE_PATH="${REMOTE_FILES[$index]}"
   NAME="${REMOTE_PATH##*/}"
-  SAFE_NAME_RE='^[A-Za-z0-9_. -]+
+  [[ "$NAME" =~ ^[A-Za-z0-9_.-]+$ ]] || die "Güvenlik nedeniyle desteklenmeyen dosya adı: $NAME"
 
-  DEVICE_META="$("${ADB[@]}" shell "stat -c '%s|%y' '$REMOTE_PATH'" 2>/dev/null | tr -d '\r' || true)"
+  DEVICE_META="$("${ADB[@]}" shell "stat -c '%s|%y' '$REMOTE_PATH'" 2>/dev/null | tr -d '\r')"
   DEVICE_SIZE="${DEVICE_META%%|*}"
   DEVICE_MTIME="${DEVICE_META#*|}"
   [[ "$DEVICE_SIZE" =~ ^[0-9]+$ ]] || die "Kaynak dosya boyutu okunamadı: $NAME"
@@ -138,9 +140,12 @@ for index in "${!REMOTE_FILES[@]}"; do
   [[ "$LOCAL_SIZE" == "$DEVICE_SIZE" ]] || die "Dosya boyutu eşleşmiyor: $NAME"
 
   printf '| %s | %s | %s | %s | EŞLEŞTİ |\n' "$NAME" "$DEVICE_SIZE" "$DEVICE_MTIME" "$LOCAL_SHA" >> "$LOG_TMP"
+  COPIED=$((COPIED+1))
 done
 
+(( COPIED == ${#SELECTED[@]} )) || die "Seçilen ve kopyalanan dosya sayısı eşleşmiyor."
 mv "$LOG_TMP" "$OUTPUT_DIR/CIHAZ_KAMERA_CEKIMLERI_TR.md"
+
 (
   cd "$OUTPUT_DIR"
   find . -maxdepth 1 -type f ! -name "SHA256SUMS.txt" -print0 |
@@ -156,51 +161,7 @@ mv "$LOG_TMP" "$OUTPUT_DIR/CIHAZ_KAMERA_CEKIMLERI_TR.md"
   printf 'Manifest: %s\n' "$MANIFEST"
 } > "$LOG_FILE"
 
-printf '\nBAŞARILI: %s gerçek cihaz kamera dosyası kopyalandı ve doğrulandı.\n' "${#SELECTED[@]}"
-printf 'Bilgisayar klasörü: %s\n' "$OUTPUT_DIR"
-printf 'Manifest: %s\n' "$MANIFEST"
-printf 'Aktarım günlüğü: %s\n' "$LOG_FILE"
-printf 'Kaynak dosyalar telefonda korunmuştur.\n'
-
-  [[ "$NAME" =~ $SAFE_NAME_RE ]] || die "Güvenlik nedeniyle desteklenmeyen dosya adı: $NAME"
-
-  DEVICE_META="$("${ADB[@]}" shell "stat -c '%s|%y' '$REMOTE_PATH'" 2>/dev/null | tr -d '\r' || true)"
-  DEVICE_SIZE="${DEVICE_META%%|*}"
-  DEVICE_MTIME="${DEVICE_META#*|}"
-  [[ "$DEVICE_SIZE" =~ ^[0-9]+$ ]] || die "Kaynak dosya boyutu okunamadı: $NAME"
-
-  REMOTE_SHA="$("${ADB[@]}" shell "sha256sum '$REMOTE_PATH'" | awk '{print $1}' | tr -d '\r')"
-  [[ "$REMOTE_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || die "Kaynak SHA-256 alınamadı: $NAME"
-
-  DEST="$OUTPUT_DIR/$NAME"
-  [[ ! -e "$DEST" ]] || die "Hedef dosya zaten var: $DEST"
-  "${ADB[@]}" pull "$REMOTE_PATH" "$DEST" >/dev/null
-
-  LOCAL_SHA="$(sha256sum -- "$DEST" | awk '{print $1}')"
-  [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]] || die "SHA-256 eşleşmiyor: $NAME"
-  LOCAL_SIZE="$(stat -c '%s' "$DEST")"
-  [[ "$LOCAL_SIZE" == "$DEVICE_SIZE" ]] || die "Dosya boyutu eşleşmiyor: $NAME"
-
-  printf '| %s | %s | %s | %s | EŞLEŞTİ |\n' "$NAME" "$DEVICE_SIZE" "$DEVICE_MTIME" "$LOCAL_SHA" >> "$LOG_TMP"
-done
-
-mv "$LOG_TMP" "$OUTPUT_DIR/CIHAZ_KAMERA_CEKIMLERI_TR.md"
-(
-  cd "$OUTPUT_DIR"
-  find . -maxdepth 1 -type f ! -name "SHA256SUMS.txt" -print0 |
-    sort -z |
-    xargs -0 sha256sum > "$MANIFEST"
-)
-
-{
-  printf '# Kestrel V2 — Cihaz Kamerası Fotoğrafı Alma Kaydı\n\n'
-  printf 'Bilgisayar kopyası: %s\n\n' "$OUTPUT_DIR"
-  printf 'Kaynak dosyalar telefondan silinmemiştir. SHA-256 ve boyut doğrulaması yapılmıştır.\n'
-  printf 'Bu fotoğraflar gerçek Redmi kamera dosyalarıdır; sahnelenmiş materyalin fotoğrafı olabilir ve tek başına kurgusal olayın gerçekliğini kanıtlamaz.\n'
-  printf 'Manifest: %s\n' "$MANIFEST"
-} > "$LOG_FILE"
-
-printf '\nBAŞARILI: %s gerçek cihaz kamera dosyası kopyalandı ve doğrulandı.\n' "${#SELECTED[@]}"
+printf '\nBAŞARILI: %s gerçek cihaz kamera dosyası kopyalandı ve doğrulandı.\n' "$COPIED"
 printf 'Bilgisayar klasörü: %s\n' "$OUTPUT_DIR"
 printf 'Manifest: %s\n' "$MANIFEST"
 printf 'Aktarım günlüğü: %s\n' "$LOG_FILE"
