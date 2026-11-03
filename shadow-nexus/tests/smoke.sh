@@ -31,3 +31,44 @@ PY
 bash -n "$ROOT/scripts/kestrel-vaka-denetle"
 bash "$ROOT/tests/test-kestrel-vaka-denetle.sh"
 bash -n "$ROOT/scripts/kestrel-senaryo-incele"
+
+
+python3 - <<'PY' "$ROOT"
+from datetime import datetime
+from pathlib import Path
+import csv
+import sys
+
+root = Path(sys.argv[1]) / "scenarios/operation-kestrel-v2"
+
+def read_rows(name):
+    with (root / name).open(encoding="utf-8", newline="") as stream:
+        return list(csv.DictReader(stream))
+
+characters = read_rows("KARAKTERLER_V2_SIMULATED.csv")
+messages = read_rows("MESAJLASMA_V2_SIMULATED.csv")
+timeline = read_rows("OLAY_ZAMAN_CIZELGESI_V2_SIMULATED.csv")
+
+assert len(characters) == 6
+assert all(row["source_classification"] == "SENTETIK-SENARYO" for row in characters)
+accounts = [row for row in characters if row["record_type"] == "SYSTEM_ACCOUNT"]
+assert len(accounts) == 1 and accounts[0]["display_name"] == "root@c2"
+aliases = [row for row in characters if row["record_type"] == "LEGACY_ALIAS"]
+assert len(aliases) == 2
+assert all(row["mapping_status"] == "PROPOSED_PENDING_APPROVAL" for row in aliases)
+
+assert len(messages) == 12
+assert len({row["message_id"] for row in messages}) == len(messages)
+assert all(row["source_classification"] == "SENTETIK-SENARYO" for row in messages)
+message_times = [datetime.fromisoformat(row["timestamp_local"]) for row in messages]
+assert message_times == sorted(message_times)
+
+assert len(timeline) == 7
+assert len({row["event_id"] for row in timeline}) == len(timeline)
+assert all(row["source_classification"] == "SENTETIK-SENARYO" for row in timeline)
+event_times = [datetime.fromisoformat(row["scenario_time_local"]) for row in timeline]
+assert event_times == sorted(event_times)
+assert "Gerçek telefon" in (root / "V2_TASARIM_NOTU_TR.md").read_text(encoding="utf-8")
+
+print("Kestrel v2 senaryo verisi kontrolleri başarılı.")
+PY
