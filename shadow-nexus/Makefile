@@ -15,3 +15,6 @@ ozet-hash:
 	@bash ./snctl ozet-hash
 hash-dogrula:
 	@bash ./snctl hash-dogrula
+
+kestrel-denetle:
+	@bash ./scripts/kestrel-vaka-denetle
