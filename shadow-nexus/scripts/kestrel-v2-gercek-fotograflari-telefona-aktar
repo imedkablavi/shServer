@@ -65,7 +65,7 @@ done
 mapfile -t CONNECTED_SERIALS < <(adb devices | awk 'NR > 1 && $2 == "device" {print $1}')
 SERIAL="${SNX_ADB_SERIAL:-}"
 if [[ -z "$SERIAL" ]]; then
-  (("${#CONNECTED_SERIALS[@]}" == 1)) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}."
+  (( ${#CONNECTED_SERIALS[@]} == 1 )) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}."
   SERIAL="${CONNECTED_SERIALS[0]}"
 fi
 printf '%s\n' "${CONNECTED_SERIALS[@]}" | grep -Fxq -- "$SERIAL" || die "Seçilen ADB cihazı bağlı ve yetkili değil: $SERIAL"
@@ -81,7 +81,7 @@ HOST_TIME="$(date -Is)"
 HOST_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
 mkdir -p "$LOG_DIR"
-"${ADB[@]}" shell mkdir -p "$REMOTE_CASE_PHOTOS" "$REMOTE_GALLERY"
+"${ADB[@]}" shell mkdir -p "$REMOTE_CASE_PHOTOS" "$REMOTE_GALLERY" "$REMOTE_BASE/01_TRANSFER_LOG"
 
 cat > "$LOG_FILE" <<EOF
 # Kestrel V2 — Orijinal Fotoğraf Aktarım Kaydı
