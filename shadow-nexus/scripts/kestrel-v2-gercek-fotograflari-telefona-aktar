@@ -14,7 +14,7 @@ LOG_FILE="$LOG_DIR/GERCEK_FOTOGRAF_AKTARIM_TR.md"
 FILES=(
   "Usb_flash_drive_on_a_laptop_closeup.jpg"
   "Laptop-hard-drive-exposed.jpg"
-  "Datacenter_Rack.jpg"
+  "Wikimedia_Servers-0001_44.jpg"
 )
 METADATA_FILES=(
   "FOTOGRAF_PROVENANSI_TR.csv"
