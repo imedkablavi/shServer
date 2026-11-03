@@ -72,3 +72,27 @@ assert "Gerçek telefon" in (root / "V2_TASARIM_NOTU_TR.md").read_text(encoding=
 
 print("Kestrel v2 senaryo verisi kontrolleri başarılı.")
 PY
+
+
+bash -n "$ROOT/scripts/kestrel-v2-telefon-materyali-aktar"
+bash "$ROOT/scripts/kestrel-v2-telefon-materyali-aktar" --help >/dev/null
+python3 - <<'PY' "$ROOT"
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+script = (root / "scripts/kestrel-v2-telefon-materyali-aktar").read_text(encoding="utf-8")
+for required in (
+    "SNX-20261103-KESTREL-V2",
+    "KARAKTERLER_V2_SIMULATED.csv",
+    "MESAJLASMA_V2_SIMULATED.csv",
+    "OLAY_ZAMAN_CIZELGESI_V2_SIMULATED.csv",
+    "SHA256SUMS_HOST.txt",
+    "REMOTE_MATERIALS",
+):
+    assert required in script, f"Missing transfer guard or artifact: {required}"
+assert "su " not in script
+assert "rm -rf" not in script
+assert "127.0.0.1" not in script
+print("Kestrel v2 aktarım betiği statik kontrolleri başarılı.")
+PY
