@@ -85,4 +85,4 @@ Farklı bir konum kullanılıyorsa tam yol verilebilir:
 bash shadow-nexus/scripts/kestrel-vaka-denetle "/tam/yol/SNX-20261101-043455"
 ```
 
-Bu komut dosya envanterini, `run_summary.json` biçimini ve varsa SHA-256 manifestlerini salt okunur olarak kontrol eder. Eksik dosyalar uyarı olarak raporlanır; hash uyuşmazlığı hata üretir.
+Bu komut dosya envanterini, `run_summary.json` biçimini, sentetik iletişim SQLite veritabanının bütünlüğünü, telefon etkinliği JSON dosyasını, yerel sunucu JSONL günlüğünü ve varsa SHA-256 manifestlerini salt okunur olarak kontrol eder. Telefon etkinliği JSON dosyasını ana klasörde veya `09_PHONE_COPY` altında arar. Eksik dosyalar uyarı olarak raporlanır; bozuk JSON/SQLite veya hash uyuşmazlığı hata üretir. Testleri çalıştırmak için `make -C shadow-nexus test` komutunu kullanın.
