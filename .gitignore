@@ -8,3 +8,8 @@
 *.png
 *.sha256
 .env
+
+# Yerel adli bilişim vaka verileri kaynak depoya eklenmez.
+/shadow-nexus/cases/*
+!/shadow-nexus/cases/.gitkeep
+/ShadowNexus_Cases/
