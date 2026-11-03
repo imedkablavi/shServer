@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.Color;
 import android.net.Uri;
+import android.media.MediaScannerConnection;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.CalendarContract;
@@ -127,8 +128,11 @@ public class MainActivity extends Activity {
         addAction(page, "Senaryo belgelerini İndirilenler'e kaydet",
             "CSV, TXT, VCF, ICS ve etkinlik envanteri dosyalarını ortak depolama alanına yazar.",
             v -> saveTrainingFiles());
+        addAction(page, "Aktarılan fotoğrafları Galeri'ye tanıt",
+            "Önce gerçek fotoğraf aktarım betiğini çalıştırın. Bu işlem üç orijinal JPEG yolunu Android Medya Tarayıcısı'na bildirir.",
+            v -> scanKestrelPhotoFolder());
         addAction(page, "Galeri'deki gerçek eğitim fotoğraflarını aç",
-            "Wikimedia Commons kaynaklı, orijinal JPEG dosyalarını açmak için fotoğraf seçicisini kullanır. Bu uygulama fotoğraf üretmez veya değiştirmez.",
+            "Wikimedia Commons kaynaklı, orijinal JPEG dosyalarını fotoğraf seçicisinde görüntüler. Uygulama fotoğraf üretmez veya değiştirmez.",
             v -> openPhotoGallery());
         addAction(page, "Etkinlik günlüğünü dışa aktar",
             "Bu uygulamada yaptığınız işlemleri gerçek gerçekleşme zamanlarıyla JSONL olarak kaydeder.",
@@ -388,6 +392,32 @@ public class MainActivity extends Activity {
         ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
         getContentResolver().update(uri, ready, null, null);
         return uri;
+    }
+
+    private void scanKestrelPhotoFolder() {
+        File galleryDir = new File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+            "ShadowNexus-Kestrel-V2"
+        );
+        String[] names = new String[] {
+            "Usb_flash_drive_on_a_laptop_closeup.jpg",
+            "Laptop-hard-drive-exposed.jpg",
+            "Datacenter_Rack.jpg"
+        };
+        String[] paths = new String[names.length];
+        String[] mimeTypes = new String[names.length];
+        for (int i = 0; i < names.length; i++) {
+            paths[i] = new File(galleryDir, names[i]).getAbsolutePath();
+            mimeTypes[i] = "image/jpeg";
+        }
+        MediaScannerConnection.scanFile(this, paths, mimeTypes, (path, uri) -> {
+            if (uri != null) {
+                recordEvent("ORIJINAL_FOTOGRAF_MEDYA_TARAMASI", "Galeri indeksine eklendi: " + new File(path).getName());
+            } else {
+                recordEvent("ORIJINAL_FOTOGRAF_MEDYA_TARAMASI_UYARISI", "Medya taraması URI döndürmedi: " + path);
+            }
+        });
+        showMessage("Fotoğraf yolları Android Medya Tarayıcısı'na gönderildi. Birkaç saniye sonra Galeri'yi kontrol edin.");
     }
 
     private void openPhotoGallery() {
