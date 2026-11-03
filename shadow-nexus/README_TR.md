@@ -60,3 +60,13 @@ Bir dosyanın telefona kaydedilmiş olması, Oxygen tarafından kesinlikle çık
 - Sistem saati değiştirilmez; yapay zaman damgaları oluşturulmaz.
 - Root, Bootloader kilidi açma veya güvenlik açığı kullanımı yoktur.
 - USB edinim aracı bu modülden bağımsızdır; Kestrel için çalıştırılmamalıdır.
+
+## Operation Kestrel — Ana Senaryo
+
+Önceki senaryo yeni bir hikâyeyle değiştirilmemiştir. Ana vaka kimliği `SNX-20261101-043455` olarak korunur. `SNX-20261103-KESTREL-ADDON` yalnızca ek cihaz-durum kaydıdır.
+
+- [Vaka dosyası ve olay örgüsü](scenarios/operation-kestrel/VAKA_DOSYASI_TR.md)
+- [Kanıt matrisi ve sınıflandırma](scenarios/operation-kestrel/KANIT_MATRISI_TR.md)
+- [Root öncesi / Root sonrası uygulama planı](scenarios/operation-kestrel/UYGULAMA_PLANI_TR.md)
+
+Gerçek laboratuvar etkinliği, sentetik senaryo içeriği ve Oxygen'den çıkarılan kanıtlar ayrı sınıflandırılır. Root öncesi Oxygen edinimi tamamlanıp doğrulanmadan Root aşamasına geçilmez.
