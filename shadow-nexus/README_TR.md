@@ -176,3 +176,17 @@ Uygulamayı yeniden derledikten sonra **Aktarılan fotoğrafları Galeri'ye tan�
 - Uygulama SMS/Call Log veri tabanına doğrudan yazmaz ve bunlar için özel izin istemez.
 - Fotoğraf kaynağı DIŞ-KAYNAK / GERÇEK-FOTOĞRAF; dosya aktarımı GERÇEK-LAB-ETKİNLİĞİ olarak ayrı kaydedilir.
 - Root öncesi Oxygen edinimi tamamlanmadan Root'a geçilmez.
+
+
+### Redmi kamerasıyla çekilen özgün fotoğrafları koruma
+
+Gerçek cihaz kamerasıyla eğitim sahnesinin fotoğrafını çekmek için:
+- [Kamera çekim ve koruma protokolü](scenarios/operation-kestrel-v2/CIHAZ_KAMERASI_CEKIM_VE_KORUMA_V2_TR.md)
+
+Fotoğrafları telefonun `DCIM/Camera` klasöründen bilgisayara orijinal baytlarıyla almak için:
+
+```bash
+bash shadow-nexus/scripts/kestrel-v2-cihaz-kamera-fotograflarini-al
+```
+
+Betik dosyaları listeler, yalnızca seçtiğiniz fotoğrafları kopyalar, telefon kaynağını silmez ve SHA-256/boyut eşleşmesini doğrular. Orijinal fotoğraflar `03_CIHAZ_KAMERA_CEKIMLERI` içinde saklanır; dış kaynaklı Commons fotoğraflarıyla karıştırılmaz.
