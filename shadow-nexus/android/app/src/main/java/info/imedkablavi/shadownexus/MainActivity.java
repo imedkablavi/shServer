@@ -16,7 +16,9 @@ import android.provider.CalendarContract;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.view.View;
+import android.text.InputType;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -43,21 +45,34 @@ public class MainActivity extends Activity {
         final String name;
         final String company;
         final String note;
+        final String phone;
+        final String email;
 
-        TrainingContact(String name, String company, String note) {
+        TrainingContact(String name, String company, String note, String phone, String email) {
             this.name = name;
             this.company = company;
             this.note = note;
+            this.phone = phone;
+            this.email = email;
         }
     }
 
     private final TrainingContact[] contacts = new TrainingContact[] {
-        new TrainingContact("Kestrel Eğitim - Maya Reed", "Kestrel Eğitim Laboratuvarı",
-            "SENTETİK-SENARYO: Tamamen kurgusal eğitim kişisi."),
-        new TrainingContact("Kestrel Eğitim - Omar Vale", "Kestrel Eğitim Laboratuvarı",
-            "SENTETİK-SENARYO: Tamamen kurgusal eğitim kişisi."),
-        new TrainingContact("Kestrel Eğitim - Lina North", "Kestrel Eğitim Laboratuvarı",
-            "SENTETİK-SENARYO: Tamamen kurgusal eğitim kişisi.")
+        new TrainingContact("Deniz Arslan [EĞİTİM]", "Kestrel Eğitim Laboratuvarı",
+            "SENTETİK-SENARYO: Kurgusal kişi. Telefon alanı geçersiz yer tutucudur; arama/SMS için kullanmayın.",
+            "0000000001", "deniz.arslan@example.invalid"),
+        new TrainingContact("Kerem Yılmaz [EĞİTİM]", "Kestrel Eğitim Laboratuvarı",
+            "SENTETİK-SENARYO: Kurgusal kişi. Telefon alanı geçersiz yer tutucudur; arama/SMS için kullanmayın.",
+            "0000000002", "kerem.yilmaz@example.invalid"),
+        new TrainingContact("Selin Kaya [EĞİTİM]", "Kestrel Eğitim Laboratuvarı",
+            "SENTETİK-SENARYO: Kurgusal kişi. Telefon alanı geçersiz yer tutucudur; arama/SMS için kullanmayın.",
+            "0000000003", "selin.kaya@example.invalid"),
+        new TrainingContact("Mert Aydın [EĞİTİM]", "Kestrel Eğitim Laboratuvarı",
+            "SENTETİK-SENARYO: Kurgusal kişi. Telefon alanı geçersiz yer tutucudur; arama/SMS için kullanmayın.",
+            "0000000004", "mert.aydin@example.invalid"),
+        new TrainingContact("Ece Yıldız [EĞİTİM]", "Kestrel Eğitim Laboratuvarı",
+            "SENTETİK-SENARYO: Kurgusal kişi. Telefon alanı geçersiz yer tutucudur; arama/SMS için kullanmayın.",
+            "0000000005", "ece.yildiz@example.invalid")
     };
 
     @Override
@@ -129,6 +144,20 @@ public class MainActivity extends Activity {
         addAction(page, "Kestrel takvim etkinliği oluştur",
             "Android Takvim ekranını açar. Etkinliği yalnızca siz onaylayıp kaydedersiniz.",
             v -> createCalendarEvent());
+
+        addSectionTitle(page, "GERÇEK TEST İLETİŞİMİ");
+        addAction(page, "SMS test taslağı hazırla",
+            "Yalnızca size ait/izinli ikinci test numarasını girer. SMS uygulaması açılır; gönder düğmesine siz basarsınız.",
+            v -> prepareSmsDraft());
+        addAction(page, "Arama test ekranını aç",
+            "Telefon çeviricisini açar; aramayı siz başlatırsınız. Gerçek arama kaydı ancak görüşme gerçekleşirse oluşur.",
+            v -> prepareCall());
+        TextView callNote = new TextView(this);
+        callNote.setText("GELEN KAYITLAR: Gerçek gelen SMS veya arama için ikinci kontrollü test hattından bu telefona mesaj gönderin ya da arayın. Kaçırılan arama için aramayı cevaplamadan reddedin. Bu uygulama sahte SMS/arama satırı üretmez.");
+        callNote.setTextSize(13);
+        callNote.setTextColor(Color.rgb(85, 99, 112));
+        callNote.setPadding(dp(12), dp(10), dp(12), dp(10));
+        page.addView(callNote);
 
         addSectionTitle(page, "LABORATUVAR BAĞLANTISI");
         addAction(page, "Bazzite üzerindeki Kestrel portalını aç",
@@ -209,8 +238,12 @@ public class MainActivity extends Activity {
         intent.putExtra(ContactsContract.Intents.Insert.COMPANY, person.company);
         intent.putExtra(ContactsContract.Intents.Insert.NOTES, person.note);
         try {
+            intent.putExtra(ContactsContract.Intents.Insert.PHONE, person.phone);
+            intent.putExtra(ContactsContract.Intents.Insert.PHONE_TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE);
+            intent.putExtra(ContactsContract.Intents.Insert.EMAIL, person.email);
+            intent.putExtra(ContactsContract.Intents.Insert.EMAIL_TYPE, ContactsContract.CommonDataKinds.Email.TYPE_WORK);
             startActivity(intent);
-            recordEvent("REHBER_FORMU_ACILDI", "Kişi formu açıldı: " + person.name + ". Kaydedilip kaydedilmediği kullanıcı onayından sonra doğrulanmalıdır.");
+            recordEvent("REHBER_FORMU_ACILDI", "Kişi formu açıldı: " + person.name + ". Telefon alanı çevrilemez sentetik yer tutucudur; kayıt kullanıcı onayından sonra doğrulanmalıdır.");
         } catch (Exception ex) {
             showMessage("Rehber uygulaması açılamadı: " + ex.getMessage());
             recordEvent("REHBER_FORMU_HATASI", ex.toString());
@@ -242,6 +275,62 @@ public class MainActivity extends Activity {
             showMessage("Takvim uygulaması açılamadı: " + ex.getMessage());
             recordEvent("TAKVIM_FORMU_HATASI", ex.toString());
         }
+    }
+
+    private void prepareSmsDraft() {
+        String[] templates = new String[] {
+            "Merhaba, Kestrel eğitim dosyalarını aldım. SHA-256 kontrolünü tamamlayınca haber vereceğim. [SENTETİK-SENARYO / LAB TESTİ]",
+            "Toplantı saatini 15:30 olarak güncelledim. Eğitim kapsamı dışında gerçek müşteri verisi yok. [SENTETİK-SENARYO / LAB TESTİ]",
+            "USB teslim kaydındaki farkı gördüm. Lütfen varlık envanterini yeniden kontrol et. [SENTETİK-SENARYO / LAB TESTİ]",
+            "Vaka materyallerini aldım. Bu ileti yalnızca kontrollü mobil adli bilişim eğitimi içindir. [SENTETİK-SENARYO / LAB TESTİ]"
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("SMS eğitim metnini seçin")
+            .setItems(templates, (dialog, which) -> promptForTestNumber(true, templates[which]))
+            .setNegativeButton("Vazgeç", null)
+            .show();
+    }
+
+    private void prepareCall() {
+        promptForTestNumber(false, null);
+    }
+
+    private void promptForTestNumber(boolean sms, String message) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_PHONE);
+        input.setHint("+90... — yalnızca kontrollü test numarası");
+        new AlertDialog.Builder(this)
+            .setTitle(sms ? "Test SMS alıcısı" : "Test arama numarası")
+            .setMessage("Yalnızca size ait veya açık izniniz bulunan ikinci test hattını girin. Gerçek SMS/arama ücretleri oluşabilir. Sahte kayıt oluşturulmaz.")
+            .setView(input)
+            .setNegativeButton("Vazgeç", null)
+            .setPositiveButton(sms ? "SMS taslağını aç" : "Telefon çeviricisini aç", (dialog, which) -> {
+                String number = input.getText().toString().trim();
+                String digits = number.replaceAll("[^0-9]", "");
+                if (digits.length() < 7 || !number.matches("[+0-9() .-]{7,24}")) {
+                    showMessage("Geçerli bir test numarası girin.");
+                    recordEvent("TEST_NUMARASI_REDDEDILDI", "Numara biçimi geçersizdi; iletişim uygulaması açılmadı.");
+                    return;
+                }
+                try {
+                    if (sms) {
+                        Intent intent = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", number, null));
+                        intent.putExtra("sms_body", message);
+                        intent.putExtra(Intent.EXTRA_TEXT, message);
+                        startActivity(intent);
+                        recordEvent("SMS_TASLAGI_HAZIRLANDI", "Varsayılan SMS uygulaması açıldı. Bu günlük gönderim yapıldığını kanıtlamaz; gönderim kullanıcı onayına bağlıdır.");
+                    } else {
+                        Intent intent = new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null));
+                        startActivity(intent);
+                        recordEvent("ARAMA_EKRANI_ACILDI", "Varsayılan çevirici açıldı. Bu günlük arama yapıldığını kanıtlamaz; arama kullanıcı tarafından başlatılmalıdır.");
+                    }
+                } catch (Exception ex) {
+                    recordEvent("TEST_ILETISIM_UYGULAMASI_HATASI", ex.toString());
+                    showMessage("İletişim uygulaması açılamadı: " + ex.getMessage());
+                }
+            })
+            .show();
     }
 
     private void openPortal() {
@@ -444,6 +533,8 @@ public class MainActivity extends Activity {
             result.append("BEGIN:VCARD\nVERSION:3.0\n");
             result.append("FN:").append(person.name).append("\n");
             result.append("ORG:").append(person.company).append("\n");
+            result.append("TEL;TYPE=CELL:").append(person.phone).append("\n");
+            result.append("EMAIL;TYPE=INTERNET:").append(person.email).append("\n");
             result.append("NOTE:").append(person.note).append("\n");
             result.append("END:VCARD\n");
         }
