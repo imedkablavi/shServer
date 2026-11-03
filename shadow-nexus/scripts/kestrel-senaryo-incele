@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+DEFAULT_CASE="$HOME/ShadowNexus_Cases/SNX-20261101-043455"
+CASE_DIR="${1:-${SN_CASE_DIR:-$DEFAULT_CASE}}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+Operation Kestrel — içerik incelemesi (salt okunur)
+
+Kullanım:
+  bash shadow-nexus/scripts/kestrel-senaryo-incele
+  bash shadow-nexus/scripts/kestrel-senaryo-incele "/tam/yol/SNX-20261101-043455"
+
+Senaryo SQLite, JSON, JSONL ve CSV dosyalarını okur; kayıtları sınıflandırır.
+Telefonla bağlantı kurmaz, ağ isteği göndermez ve dosya değiştirmez.
+EOF
+  exit 0
+fi
+
+if [[ ! -d "$CASE_DIR" ]]; then
+  printf 'HATA: Vaka klasörü bulunamadı: %s\n' "$CASE_DIR" >&2
+  exit 2
+fi
+
+CASE_DIR="$(cd "$CASE_DIR" && pwd -P)"
+python3 - "$CASE_DIR" <<'PY'
+import csv
+import json
+import re
+import sqlite3
+import sys
+from collections import Counter
+from pathlib import Path
+from urllib.parse import urlsplit
+
+root = Path(sys.argv[1])
+
+def line(title):
+    print("\n===== " + title + " =====")
+
+def safe_value(key, value):
+    name = str(key).lower()
+    if any(word in name for word in ("password", "passwd", "secret", "token", "cookie", "authorization", "credential", "private_key")):
+        return "[GİZLENDİ]"
+    if value is None:
+        return None
+    text = str(value).replace("\n", " ").replace("\r", " ")
+    text = re.sub(r"(?i)(password|token|secret|authorization)=([^& ]+)", r"\1=[GİZLENDİ]", text)
+    if len(text) > 180:
+        text = text[:177] + "..."
+    return text
+
+def print_rows(db, table, limit=8):
+    columns = [r[1] for r in db.execute(f'PRAGMA table_info("{table}")')]
+    print(f"Tablo: {table} | Sütunlar: {', '.join(columns)}")
+    rows = db.execute(f'SELECT * FROM "{table}" LIMIT ?', (limit,)).fetchall()
+    if not rows:
+        print("  (kayıt yok)")
+        return
+    for row in rows:
+        parts = []
+        for col, val in zip(columns, row):
+            if col.lower() in ("id", "uuid", "rowid"):
+                continue
+            parts.append(f"{col}={safe_value(col, val)}")
+        print("  - " + " | ".join(parts[:10]))
+    total = db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+    if total > limit:
+        print(f"  ... {total-limit} ek kayıt")
+
+def sqlite_report(path, label, show_tables):
+    if not path.exists():
+        print(f"[YOK] {label}: {path.relative_to(root)}")
+        return None
+    print(f"[BULUNDU] {label}: {path.relative_to(root)} ({path.stat().st_size} bayt)")
+    uri = path.resolve().as_uri() + "?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True) as db:
+            db.execute("PRAGMA query_only=ON")
+            result = db.execute("PRAGMA integrity_check").fetchone()[0]
+            print(f"Bütünlük: {result}")
+            tables = [r[0] for r in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )]
+            for table in tables:
+                count = db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                print(f"  {table}: {count} kayıt")
+            for table in show_tables:
+                if table in tables:
+                    print_rows(db, table)
+            return db_path_counts(db, tables)
+    except sqlite3.Error as exc:
+        print(f"[HATA] SQLite okunamadı: {exc}")
+        return None
+
+def db_path_counts(db, tables):
+    if "http_events" not in tables:
+        return None
+    cols = [r[1] for r in db.execute('PRAGMA table_info("http_events")')]
+    rows = db.execute('SELECT * FROM "http_events" LIMIT 1000').fetchall()
+    total = db.execute('SELECT COUNT(*) FROM "http_events"').fetchone()[0]
+    print(f"HTTP olay tablosu: {total} kayıt; sütunlar: {', '.join(cols)}")
+    for row in rows[:12]:
+        item = dict(zip(cols, row))
+        fields = []
+        for key in ("timestamp", "time", "method", "path", "url", "status", "status_code"):
+            if key in item and item[key] is not None:
+                val = item[key]
+                if key in ("path", "url"):
+                    parsed = urlsplit(str(val))
+                    val = parsed.path or "/"
+                fields.append(f"{key}={safe_value(key, val)}")
+        if fields:
+            print("  - " + " | ".join(fields))
+    return total
+
+line("VAKA ÖZETİ")
+summary_path = root / "08_REPORTS/run_summary.json"
+if summary_path.exists():
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        for k in ("case_id", "classification", "generated_at", "created_at",
+                  "phone_http_requests", "server_observed_requests",
+                  "browser_view_intents", "browser_user_agent_requests",
+                  "sha256_file_count"):
+            if k in summary:
+                print(f"{k}: {safe_value(k, summary[k])}")
+        print("Üst düzey alanlar: " + ", ".join(summary.keys()))
+    except Exception as exc:
+        print(f"[HATA] run_summary.json: {exc}")
+else:
+    print("[YOK] 08_REPORTS/run_summary.json")
+
+line("SENTETİK İLETİŞİM VERİ KÜMESİ")
+sqlite_report(
+    root / "05_SCENARIO_DATA/scenario_communications_SIMULATED.sqlite3",
+    "SENTETİK-SENARYO SQLite",
+    ["persons", "threads", "messages", "calls", "events", "files", "case_metadata", "provenance"]
+)
+
+line("TELEFON ETKİNLİĞİ VERİLERİ")
+phone_json = root / "07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json"
+if not phone_json.exists():
+    phone_json = root / "09_PHONE_COPY/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json"
+if phone_json.exists():
+    try:
+        data = json.loads(phone_json.read_text(encoding="utf-8"))
+        print(f"[BULUNDU] {phone_json.relative_to(root)}")
+        if isinstance(data, dict):
+            print("JSON alanları: " + ", ".join(data.keys()))
+            for k, v in data.items():
+                if isinstance(v, list):
+                    print(f"  {k}: {len(v)} kayıt")
+                    for item in v[:8]:
+                        if isinstance(item, dict):
+                            parts = []
+                            for key in ("timestamp", "time", "method", "path", "url", "status", "event", "type"):
+                                if key in item:
+                                    val = item[key]
+                                    if key in ("path", "url"):
+                                        parsed = urlsplit(str(val))
+                                        val = parsed.path or "/"
+                                    parts.append(f"{key}={safe_value(key, val)}")
+                            if parts:
+                                print("    - " + " | ".join(parts))
+        else:
+            print(f"JSON türü: {type(data).__name__}")
+    except Exception as exc:
+        print(f"[HATA] Telefon etkinliği JSON: {exc}")
+else:
+    print("[YOK] Telefon etkinliği JSON dosyası")
+
+sqlite_report(
+    root / "09_PHONE_COPY/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.sqlite3",
+    "GERÇEK-LAB-ETKİNLİĞİ SQLite kopyası",
+    ["http_events"]
+)
+
+line("LABORATUVAR SUNUCU GÜNLÜĞÜ")
+log = root / "07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl"
+if log.exists():
+    counts = Counter()
+    times = []
+    malformed = 0
+    for raw in log.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not raw.strip():
+            continue
+        try:
+            item = json.loads(raw)
+            method = str(item.get("method", item.get("request_method", "?"))).upper()
+            raw_path = str(item.get("path", item.get("url", item.get("request", "?"))))
+            path = urlsplit(raw_path).path or "/"
+            status = str(item.get("status", item.get("status_code", "?")))
+            counts[(method, path, status)] += 1
+            stamp = item.get("timestamp", item.get("time", item.get("ts")))
+            if stamp is not None:
+                times.append(str(stamp))
+        except Exception:
+            malformed += 1
+    print(f"Boş olmayan kayıt: {sum(counts.values())} | Geçersiz JSON satırı: {malformed}")
+    for (method, path, status), count in sorted(counts.items()):
+        print(f"  {method} {path} → {status}: {count}")
+    if times:
+        print(f"İlk zaman alanı: {times[0]}")
+        print(f"Son zaman alanı: {times[-1]}")
+else:
+    print("[YOK] 07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl")
+
+line("SENARYO BELGELERİ")
+for name in ("Kestrel_Timeline.csv", "Kestrel_Asset_Register.csv", "Kestrel_Transfer_Record.csv"):
+    path = root / "06_DOCUMENTS" / name
+    if not path.exists():
+        print(f"[YOK] {name}")
+        continue
+    print(f"\n{name}:")
+    try:
+        with path.open(encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        print(f"  Kayıt sayısı: {len(rows)}")
+        for row in rows[:12]:
+            print("  - " + " | ".join(
+                f"{k}={safe_value(k, v)}" for k, v in row.items()
+            ))
+    except Exception as exc:
+        print(f"  [HATA] CSV okunamadı: {exc}")
+
+line("SINIFLANDIRMA VE SINIRLAR")
+print("- Senaryo kişi/mesaj/arama kayıtları SENTETİK-SENARYO olarak değerlendirilir.")
+print("- Yerel portal istekleri GERÇEK-LAB-ETKİNLİĞİ niteliğindedir.")
+print("- Sunucu günlüğü, gerçek bir üçüncü taraf sunucu ihlalini kanıtlamaz.")
+print("- Bu çıktı telefonun adli imajı veya Oxygen çıkarımı değildir.")
+print("- Bu inceleme salt okunurdur; hiçbir dosya değiştirilmedi.")
+PY
