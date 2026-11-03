@@ -30,3 +30,4 @@ print("Shadow Nexus denetimleri başarılı.")
 PY
 bash -n "$ROOT/scripts/kestrel-vaka-denetle"
 bash "$ROOT/tests/test-kestrel-vaka-denetle.sh"
+bash -n "$ROOT/scripts/kestrel-senaryo-incele"
