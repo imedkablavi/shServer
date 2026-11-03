@@ -18,3 +18,5 @@ hash-dogrula:
 
 kestrel-denetle:
 	@bash ./scripts/kestrel-vaka-denetle
+kestrel-incele:
+	@bash ./scripts/kestrel-senaryo-incele
