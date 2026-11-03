@@ -96,3 +96,55 @@ assert "rm -rf" not in script
 assert "127.0.0.1" not in script
 print("Kestrel v2 aktarım betiği statik kontrolleri başarılı.")
 PY
+
+
+bash -n "$ROOT/scripts/kestrel-v2-gercek-fotograflari-telefona-aktar"
+bash "$ROOT/scripts/kestrel-v2-gercek-fotograflari-telefona-aktar" --help >/dev/null
+python3 -m py_compile "$ROOT/scripts/kestrel-v2-gercek-fotograf-paketi-indir.py"
+python3 "$ROOT/scripts/kestrel-v2-gercek-fotograf-paketi-indir.py" --help >/dev/null
+python3 - <<'PY' "$ROOT"
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+root = Path(sys.argv[1])
+java = (root / "android/app/src/main/java/info/imedkablavi/shadownexus/MainActivity.java").read_text(encoding="utf-8")
+manifest = ET.parse(root / "android/app/src/main/AndroidManifest.xml").getroot()
+permissions = {
+    node.attrib.get("{http://schemas.android.com/apk/res/android}name")
+    for node in manifest.findall("uses-permission")
+}
+assert not any(
+    p and any(token in p for token in ("SEND_SMS", "WRITE_SMS", "WRITE_CALL_LOG", "READ_CALL_LOG"))
+    for p in permissions
+)
+assert "Intent.ACTION_SENDTO" in java
+assert "Intent.ACTION_DIAL" in java
+assert "sms_body" in java
+assert "MediaScannerConnection.scanFile" in java
+assert "Deniz Arslan [EĞİTİM]" in java
+assert "Kerem Yılmaz [EĞİTİM]" in java
+assert "Selin Kaya [EĞİTİM]" in java
+assert "Mert Aydın [EĞİTİM]" in java
+assert "Ece Yıldız [EĞİTİM]" in java
+assert "example.invalid" in java
+assert "0000000001" in java
+assert "SmsManager" not in java
+assert "CallLog.Calls.CONTENT_URI" not in java
+assert "saveTrainingImage" not in java
+
+photo_script = (root / "scripts/kestrel-v2-gercek-fotograf-paketi-indir.py").read_text(encoding="utf-8")
+assert "commons.wikimedia.org/w/api.php" in photo_script
+assert "sha256" in photo_script.lower()
+assert "changed_after_download" in photo_script
+assert "ImageMagick" not in photo_script
+assert "PIL" not in photo_script
+
+transfer_script = (root / "scripts/kestrel-v2-gercek-fotograflari-telefona-aktar").read_text(encoding="utf-8")
+assert "sha256sum" in transfer_script
+assert "REMOTE_GALLERY" in transfer_script
+assert "MEDIA_SCANNER_SCAN_FILE" in transfer_script
+assert "rm -rf" not in transfer_script
+
+print("Kestrel v2 gerçek iletişim ve fotoğraf güvenlik kontrolleri başarılı.")
+PY
