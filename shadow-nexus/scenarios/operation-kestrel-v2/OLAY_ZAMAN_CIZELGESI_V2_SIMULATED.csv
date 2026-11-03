@@ -1,0 +1,8 @@
+event_id,scenario_time_local,event_title,event_description,related_message_ids,source_classification,forensic_limit
+EV-V2-001,2026-10-12T20:14:00+03:00,İlk iletişim ve yetki uyarısı,"Yazılı erişim onayı olmadığına ilişkin kurgusal konuşma başlar.",MSG-001;MSG-002,SENTETIK-SENARYO,"Gerçek telefon iletişimi veya sunucu erişimi değildir"
+EV-V2-002,2026-10-13T01:37:00+03:00,Sunucu envanterine ilişkin not,"Kurgusal kişi, yetkisiz biçimde envanter notları topladığını söyler.",MSG-003,SENTETIK-SENARYO,"Nmap veya gerçek ağ taraması yapıldığı anlamına gelmez"
+EV-V2-003,2026-10-14T18:22:00+03:00,Olağandışı oturum iddiası,"Kurgusal konuşmada yetkisiz oturum ve cihaz ilişkisi iddia edilir.",MSG-004;MSG-005,SENTETIK-SENARYO,"Gerçek SSH oturumu veya sunucu günlüğü değildir"
+EV-V2-004,2026-10-15T22:10:00+03:00,root@c2 hesap etiketi,"Kurgusal hesap etiketi bir konuşmada geçer.",MSG-006;MSG-007,SENTETIK-SENARYO,"Gerçek C2, botnet veya insan kimliği kanıtı değildir"
+EV-V2-005,2026-10-16T03:41:00+03:00,K-17 arşiv aktarımı iddiası,"Kurgusal kişi kurum dışı paylaşım alanına kopya aktardığını söyler.",MSG-008;MSG-009,SENTETIK-SENARYO,"Gerçek arşiv, ağ aktarımı veya veri sızdırma değildir"
+EV-V2-006,2026-10-16T04:12:00+03:00,Tor paylaşımı iddiası,"Kurgusal konuşmada Tor üzerinden paylaşım yapıldığı söylenir.",MSG-010,SENTETIK-SENARYO,"Gerçek Tor oturumu veya tarayıcı geçmişi değildir"
+EV-V2-007,2026-10-17T10:28:00+03:00,Notları kaldırma iddiası,"Kurgusal kişi not ve konuşma izlerini kaldırmaya çalıştığını söyler.",MSG-011;MSG-012,SENTETIK-SENARYO,"Gerçek silme işlemi veya silinmiş veri kalıntısı değildir"
