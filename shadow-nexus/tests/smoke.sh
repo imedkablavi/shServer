@@ -169,7 +169,7 @@ for required in (
     "/sdcard/DCIM/Camera",
     "03_CIHAZ_KAMERA_CEKIMLERI",
     "sha256sum",
-    "adb pull",
+    'pull "$REMOTE_PATH" "$DEST"',
     "Kaynak dosyalar telefonda bırakılır.",
     "EVET",
 ):
