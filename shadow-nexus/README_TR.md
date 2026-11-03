@@ -109,3 +109,16 @@ Bu araç ağ bağlantısı kurmaz, telefona erişmez ve dosya oluşturmaz. İlet
 - [Mevcut veri incelemesi ve tutarlılık açıkları](scenarios/operation-kestrel/MEVCUT_VERI_INCELEMESI_TR.md)
 
 Bu inceleme, mevcut telefon etkinliğinin yalnızca yerel eğitim portalına erişimi doğruladığını ve önceki görseldeki sunucu ihlali anlatısıyla mevcut iletişim veri kümesi arasında henüz eşleşme olmadığını açıklar. V1 vaka verileri değiştirilmeden korunur.
+
+
+## Operation Kestrel v2 — Ayrı sentetik senaryo taslağı
+
+V1 vaka dosyaları korunarak ayrı bir V2 senaryo paketi eklenmiştir. V2 materyalleri kurgusal mesajlar ve olay zaman çizelgesinden oluşur; native SMS, WhatsApp, Telegram veya gerçek sunucu günlükleri değildir.
+
+- [V2 tasarım notu](scenarios/operation-kestrel-v2/V2_TASARIM_NOTU_TR.md)
+- [V2 karakter ve hesap listesi](scenarios/operation-kestrel-v2/KARAKTERLER_V2_SIMULATED.csv)
+- [V2 sentetik mesajlaşma verisi](scenarios/operation-kestrel-v2/MESAJLASMA_V2_SIMULATED.csv)
+- [V2 sentetik olay zaman çizelgesi](scenarios/operation-kestrel-v2/OLAY_ZAMAN_CIZELGESI_V2_SIMULATED.csv)
+- [V2 kanıt kaynağı ve kullanım rehberi](scenarios/operation-kestrel-v2/KANIT_KAYNAK_REHBERI_V2_TR.md)
+
+Önceki görsel taslaktaki Shadow ve Kemal (H) etiketlerinin mevcut sentetik kişi kayıtlarıyla eşleştirilmesi henüz onaylanmamıştır; V2 tasarım notunda öneri olarak tutulur. root@c2 bir kurgusal hesap etiketidir, insan kimliği değildir. Gerçek cihaz/laboratuvar zamanları, senaryo zamanlarından ayrı kaydedilir.
