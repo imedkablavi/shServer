@@ -40,12 +40,12 @@ ASSETS = [
         "expected_author": "Evan-Amos",
     },
     {
-        "file": "Datacenter_Rack.jpg",
-        "title": "File:Datacenter Rack.jpg",
-        "page": "https://commons.wikimedia.org/wiki/File:Datacenter_Rack.jpg",
-        "purpose_tr": "Veri merkezi sunucu rafı — kurgusal Kestrel sunucusu için bağlamsal fotoğraf",
+        "file": "Wikimedia_Servers-0001_44.jpg",
+        "title": "File:Wikimedia Servers-0001 44.jpg",
+        "page": "https://commons.wikimedia.org/wiki/File:Wikimedia_Servers-0001_44.jpg",
+        "purpose_tr": "Wikimedia veri merkezi sunucu rafı — kurgusal Kestrel sunucusu için bağlamsal fotoğraf",
         "expected_license": "CC BY-SA 3.0",
-        "expected_author": "Edmondo",
+        "expected_author": "Helpameout",
     },
 ]
 
