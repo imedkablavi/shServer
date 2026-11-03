@@ -86,3 +86,19 @@ bash shadow-nexus/scripts/kestrel-vaka-denetle "/tam/yol/SNX-20261101-043455"
 ```
 
 Bu komut dosya envanterini, `run_summary.json` biçimini, sentetik iletişim SQLite veritabanının bütünlüğünü, telefon etkinliği JSON dosyasını, yerel sunucu JSONL günlüğünü ve varsa SHA-256 manifestlerini salt okunur olarak kontrol eder. Telefon etkinliği JSON dosyasını ana klasörde veya `09_PHONE_COPY` altında arar. Eksik dosyalar uyarı olarak raporlanır; bozuk JSON/SQLite veya hash uyuşmazlığı hata üretir. Testleri çalıştırmak için `make -C shadow-nexus test` komutunu kullanın.
+
+### Senaryo içeriğini inceleme
+
+Ana Kestrel vakasının sentetik iletişim veritabanı, telefondan alınmış etkinlik kopyası, yerel sunucu günlüğü ve senaryo CSV dosyalarını salt okunur incelemek için:
+
+```bash
+bash shadow-nexus/scripts/kestrel-senaryo-incele
+```
+
+Farklı vaka konumu için:
+
+```bash
+bash shadow-nexus/scripts/kestrel-senaryo-incele "/tam/yol/SNX-20261101-043455"
+```
+
+Bu araç ağ bağlantısı kurmaz, telefona erişmez ve dosya oluşturmaz. İletişim veri tabanını açıkça `SENTETİK-SENARYO`, gerçek yerel portal günlüklerini `GERÇEK-LAB-ETKİNLİĞİ` olarak değerlendirir. Hassas nitelikli sütunlar çıktıda gizlenir.
