@@ -149,3 +149,32 @@ assert "rm -rf" not in transfer_script
 
 print("Kestrel v2 gerçek iletişim ve fotoğraf güvenlik kontrolleri başarılı.")
 PY
+
+
+bash -n "$ROOT/scripts/kestrel-v2-cihaz-kamera-fotograflarini-al"
+bash "$ROOT/scripts/kestrel-v2-cihaz-kamera-fotograflarini-al" --help >/dev/null
+python3 - <<'PY' "$ROOT"
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+camera_script = (root / "scripts/kestrel-v2-cihaz-kamera-fotograflarini-al").read_text(encoding="utf-8")
+for required in (
+    "/sdcard/DCIM/Camera",
+    "03_CIHAZ_KAMERA_CEKIMLERI",
+    "sha256sum",
+    "adb pull",
+    "Kaynak dosyalar telefonda bırakılır.",
+    "EVET",
+):
+    assert required in camera_script, f"Missing camera preservation invariant: {required}"
+assert "adb shell rm " not in camera_script
+assert "rm -rf" not in camera_script
+assert "magick " not in camera_script
+assert "exiftool -" not in camera_script
+
+guide = (root / "scenarios/operation-kestrel-v2/CIHAZ_KAMERASI_CEKIM_VE_KORUMA_V2_TR.md").read_text(encoding="utf-8")
+assert "EXIF" in guide and "SHA-256" in guide
+assert "SENTETİK EĞİTİM MATERYALİ" in guide
+print("Kestrel v2 gerçek cihaz fotoğrafı koruma kontrolleri başarılı.")
+PY
