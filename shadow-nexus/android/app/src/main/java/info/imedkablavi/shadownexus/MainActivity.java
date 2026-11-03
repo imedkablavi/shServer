@@ -4,9 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.Color;
 import android.net.Uri;
@@ -130,9 +127,9 @@ public class MainActivity extends Activity {
         addAction(page, "Senaryo belgelerini İndirilenler'e kaydet",
             "CSV, TXT, VCF, ICS ve etkinlik envanteri dosyalarını ortak depolama alanına yazar.",
             v -> saveTrainingFiles());
-        addAction(page, "Sentetik eğitim görselini Galeri'ye kaydet",
-            "Üzerinde görünür SENTETİK EĞİTİM GÖRSELİ filigranı bulunan bir PNG oluşturur.",
-            v -> saveTrainingImage());
+        addAction(page, "Galeri'deki gerçek eğitim fotoğraflarını aç",
+            "Wikimedia Commons kaynaklı, orijinal JPEG dosyalarını açmak için fotoğraf seçicisini kullanır. Bu uygulama fotoğraf üretmez veya değiştirmez.",
+            v -> openPhotoGallery());
         addAction(page, "Etkinlik günlüğünü dışa aktar",
             "Bu uygulamada yaptığınız işlemleri gerçek gerçekleşme zamanlarıyla JSONL olarak kaydeder.",
             v -> exportActivityLog());
@@ -393,62 +390,16 @@ public class MainActivity extends Activity {
         return uri;
     }
 
-    private void saveTrainingImage() {
-        int width = 1200;
-        int height = 1500;
-        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.rgb(236, 242, 247));
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.rgb(18, 48, 72));
-        canvas.drawRoundRect(70, 90, 1130, 1410, 40, 40, paint);
-        paint.setColor(Color.WHITE);
-        paint.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
-        paint.setTextSize(74);
-        canvas.drawText("OPERASYON", 130, 270, paint);
-        canvas.drawText("KESTREL", 130, 365, paint);
-        paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
-        paint.setTextSize(38);
-        canvas.drawText("Mobil adli bilişim eğitim senaryosu", 130, 470, paint);
-        paint.setColor(Color.rgb(255, 205, 90));
-        canvas.drawRoundRect(130, 600, 1070, 760, 22, 22, paint);
-        paint.setColor(Color.rgb(36, 48, 60));
-        paint.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
-        paint.setTextSize(44);
-        canvas.drawText("SENTETİK EĞİTİM GÖRSELİ", 170, 700, paint);
-        paint.setColor(Color.WHITE);
-        paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
-        paint.setTextSize(34);
-        canvas.drawText("Gerçek olay veya fotoğraf değildir.", 130, 900, paint);
-        canvas.drawText("Tüm kişi ve kayıtlar kurgusaldır.", 130, 960, paint);
-        canvas.drawText("Shadow Nexus / Kestrel Laboratuvarı", 130, 1250, paint);
-
-        String name = "Kestrel_Sentetik_Egitim_Gorseli_" +
-            new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date()) + ".png";
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-        values.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
-        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ShadowNexus-Kestrel");
-        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-        Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-        if (uri == null) {
-            bitmap.recycle();
-            showMessage("Galeri görseli için kayıt oluşturulamadı.");
-            return;
-        }
-        try (OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
-            if (output == null) throw new IllegalStateException("Görsel akışı açılamadı.");
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
-            ContentValues ready = new ContentValues();
-            ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            getContentResolver().update(uri, ready, null, null);
-            recordEvent("SENTETIK_GORSEL_KAYDEDILDI", name);
-            showMessage("Filigranlı eğitim görseli Galeri'ye kaydedildi.");
+    private void openPhotoGallery() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            intent.setType("image/*");
+            startActivity(Intent.createChooser(intent, "Orijinal eğitim fotoğrafını seçin"));
+            recordEvent("GERCEK_FOTOGRAF_SECICI_ACILDI",
+                "Android fotoğraf seçicisi açıldı. Kaynak fotoğraflar ADB aktarım aracıyla Galeri klasörüne kopyalanmalıdır.");
         } catch (Exception ex) {
-            recordEvent("GORSEL_KAYIT_HATASI", ex.toString());
-            showMessage("Görsel kaydedilemedi: " + ex.getMessage());
-        } finally {
-            bitmap.recycle();
+            recordEvent("FOTOGRAF_SECICI_HATASI", ex.toString());
+            showMessage("Fotoğraf seçicisi açılamadı: " + ex.getMessage());
         }
     }
 
