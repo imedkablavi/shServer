@@ -128,6 +128,7 @@ assert "Kerem Yılmaz [EĞİTİM]" in java
 assert "Selin Kaya [EĞİTİM]" in java
 assert "Mert Aydın [EĞİTİM]" in java
 assert "Ece Yıldız [EĞİTİM]" in java
+assert "Wikimedia_Servers-0001_44.jpg" in java
 assert "example.invalid" in java
 assert "0000000001" in java
 assert "SmsManager" not in java
@@ -138,6 +139,10 @@ photo_script = (root / "scripts/kestrel-v2-gercek-fotograf-paketi-indir.py").rea
 assert "commons.wikimedia.org/w/api.php" in photo_script
 assert "sha256" in photo_script.lower()
 assert "changed_after_download" in photo_script
+assert "Shixart1985" in photo_script
+assert "Evan-Amos" in photo_script
+assert "Helpameout" in photo_script
+assert "Wikimedia_Servers-0001_44.jpg" in photo_script
 assert "ImageMagick" not in photo_script
 assert "PIL" not in photo_script
 
@@ -145,6 +150,7 @@ transfer_script = (root / "scripts/kestrel-v2-gercek-fotograflari-telefona-aktar
 assert "sha256sum" in transfer_script
 assert "REMOTE_GALLERY" in transfer_script
 assert "MEDIA_SCANNER_SCAN_FILE" in transfer_script
+assert "Wikimedia_Servers-0001_44.jpg" in transfer_script
 assert "rm -rf" not in transfer_script
 
 print("Kestrel v2 gerçek iletişim ve fotoğraf güvenlik kontrolleri başarılı.")
