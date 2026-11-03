@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+DEFAULT_CASE="$HOME/ShadowNexus_Cases/SNX-20261101-043455"
+CASE_DIR="${1:-${SN_CASE_DIR:-$DEFAULT_CASE}}"
+
+yardim() {
+  cat <<'EOF'
+Kestrel vaka denetimi — salt okunur
+
+Kullanım:
+  bash shadow-nexus/scripts/kestrel-vaka-denetle
+  bash shadow-nexus/scripts/kestrel-vaka-denetle "/tam/yol/SNX-20261101-043455"
+
+Bu araç:
+- vaka dosyalarını listeler;
+- run_summary.json dosyasının JSON biçimini denetler;
+- mevcut SHA256SUMS.txt ve MASTER_SHA256SUMS manifestlerini doğrular;
+- bilinen gerçek-lab ve sentetik veri dosyalarının varlığını bildirir.
+
+Telefonla bağlantı kurmaz ve hiçbir dosyayı değiştirmez.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  yardim
+  exit 0
+fi
+
+if [[ ! -d "$CASE_DIR" ]]; then
+  printf 'HATA: Vaka klasörü bulunamadı: %s\n' "$CASE_DIR" >&2
+  printf 'İlk parametre olarak mevcut vaka klasörünün tam yolunu verin.\n' >&2
+  exit 2
+fi
+
+CASE_DIR="$(cd "$CASE_DIR" && pwd -P)"
+printf 'KESTREL VAKA DENETİMİ\n'
+printf 'Vaka klasörü: %s\n' "$CASE_DIR"
+printf 'Denetim zamanı: %s\n\n' "$(date --iso-8601=seconds)"
+
+failed=0
+warnings=0
+
+summary="$CASE_DIR/08_REPORTS/run_summary.json"
+if [[ -f "$summary" ]]; then
+  if python3 - "$summary" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"[HATA] run_summary.json okunamadı: {exc}")
+    raise SystemExit(1)
+
+if not isinstance(data, dict):
+    print("[HATA] run_summary.json üst düzey nesne değil.")
+    raise SystemExit(1)
+
+print("[TAMAM] run_summary.json geçerli JSON.")
+for key in ("case_id", "case", "classification", "generated_at", "created_at"):
+    if key in data:
+        print(f"  {key}: {data[key]}")
+PY
+  then
+    :
+  else
+    failed=1
+  fi
+else
+  printf '[UYARI] 08_REPORTS/run_summary.json bulunamadı.\n'
+  warnings=$((warnings + 1))
+fi
+
+printf '\n===== DOSYA ENVANTERİ =====\n'
+file_count="$(find "$CASE_DIR" -type f | wc -l | tr -d ' ')"
+printf 'Toplam dosya: %s\n' "$file_count"
+find "$CASE_DIR" -type f -printf '%P | %s bayt\n' | sort
+
+printf '\n===== BİLİNEN SENARYO DOSYALARI =====\n'
+for rel in \
+  "05_SCENARIO_DATA/scenario_communications_SIMULATED.sqlite3" \
+  "07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json" \
+  "07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl"
+do
+  if [[ -f "$CASE_DIR/$rel" ]]; then
+    printf '[BULUNDU] %s\n' "$rel"
+  else
+    printf '[UYARI] %s\n' "$rel"
+    warnings=$((warnings + 1))
+  fi
+done
+
+printf '\n===== SHA-256 MANİFESTLERİ =====\n'
+manifest_count=0
+for manifest in SHA256SUMS.txt MASTER_SHA256SUMS; do
+  if [[ -f "$CASE_DIR/$manifest" ]]; then
+    manifest_count=$((manifest_count + 1))
+    printf '\nManifest: %s\n' "$manifest"
+    if (cd "$CASE_DIR" && sha256sum --check --strict "$manifest"); then
+      printf '[TAMAM] %s doğrulandı.\n' "$manifest"
+    else
+      printf '[HATA] %s doğrulaması başarısız.\n' "$manifest"
+      failed=1
+    fi
+  fi
+done
+
+if (( manifest_count == 0 )); then
+  printf '[UYARI] Desteklenen SHA-256 manifesti bulunamadı.\n'
+  warnings=$((warnings + 1))
+fi
+
+printf '\n===== SONUÇ =====\n'
+if (( failed != 0 )); then
+  printf 'BAŞARISIZ: En az bir zorunlu doğrulama başarısız.\n'
+  exit 1
+elif (( warnings != 0 )); then
+  printf 'UYARI: Denetim tamamlandı; %s eksik veya doğrulanmamış öğe var.\n' "$warnings"
+  exit 0
+else
+  printf 'BAŞARILI: Özet, bilinen dosyalar ve SHA-256 manifestleri denetlendi.\n'
+fi
