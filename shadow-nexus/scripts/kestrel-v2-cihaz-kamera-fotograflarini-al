@@ -64,7 +64,8 @@ read -r SELECTION
 [[ -n "$SELECTION" ]] || die "Herhangi bir fotoğraf seçilmedi."
 
 declare -A SELECTED=()
-for token in $SELECTION; do
+read -r -a TOKENS <<< "$SELECTION"
+for token in "${TOKENS[@]}"; do
   [[ "$token" =~ ^[0-9]+$ ]] || die "Geçersiz seçim: $token"
   index=$((token-1))
   (( index >= 0 && index < ${#REMOTE_FILES[@]} )) || die "Seçim numarası aralık dışında: $token"
