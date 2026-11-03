@@ -422,8 +422,8 @@ public class MainActivity extends Activity {
 
     private void openPhotoGallery() {
         try {
-            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-            intent.setType("image/*");
+            Intent intent = new Intent(Intent.ACTION_PICK);
+            intent.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
             startActivity(Intent.createChooser(intent, "Orijinal eğitim fotoğrafını seçin"));
             recordEvent("GERCEK_FOTOGRAF_SECICI_ACILDI",
                 "Android fotoğraf seçicisi açıldı. Kaynak fotoğraflar ADB aktarım aracıyla Galeri klasörüne kopyalanmalıdır.");
