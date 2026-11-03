@@ -122,3 +122,22 @@ V1 vaka dosyaları korunarak ayrı bir V2 senaryo paketi eklenmiştir. V2 matery
 - [V2 kanıt kaynağı ve kullanım rehberi](scenarios/operation-kestrel-v2/KANIT_KAYNAK_REHBERI_V2_TR.md)
 
 Önceki görsel taslaktaki Shadow ve Kemal (H) etiketlerinin mevcut sentetik kişi kayıtlarıyla eşleştirilmesi henüz onaylanmamıştır; V2 tasarım notunda öneri olarak tutulur. root@c2 bir kurgusal hesap etiketidir, insan kimliği değildir. Gerçek cihaz/laboratuvar zamanları, senaryo zamanlarından ayrı kaydedilir.
+
+
+### Kestrel V2 materyallerini telefona aktarma
+
+Root öncesi senaryo materyallerini ayrı bir klasöre, normal dosya aktarımıyla kopyalamak için:
+
+```bash
+bash shadow-nexus/scripts/kestrel-v2-telefon-materyali-aktar
+```
+
+Birden fazla ADB cihazı bağlıysa:
+
+```bash
+SNX_ADB_SERIAL=CIHAZ_SERI bash shadow-nexus/scripts/kestrel-v2-telefon-materyali-aktar
+```
+
+Betiğin oluşturduğu bilgisayar vaka klasörü `$HOME/ShadowNexus_Cases/SNX-20261103-KESTREL-V2`, telefon klasörü ise `/sdcard/Download/ShadowNexus_Cases/SNX-20261103-KESTREL-V2` olur. Altı V2 dosyası kopyalanır, kaynak ve hedef SHA-256 değerleri karşılaştırılır, aktarım günlüğü ve manifest iki tarafta saklanır. Hedef klasörlerden biri zaten varsa betik üzerine yazmak yerine durur.
+
+Bu işlem gerçek laboratuvar aktarımıdır; aktarılan içeriklerin tümü SENTETİK-SENARYO olarak kalır. V1 vaka klasörüne, uygulama veritabanlarına veya sistem saatine dokunulmaz. Betik Root veya Oxygen edinimi yapmaz.
