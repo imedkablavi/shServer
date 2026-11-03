@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CASE_ID="SNX-20261103-KESTREL-V2"
+HOST_BASE="${SNX_CASES_DIR:-$HOME/ShadowNexus_Cases}"
+HOST_CASE="$HOST_BASE/$CASE_ID"
+PHOTO_DIR="$HOST_CASE/02_GERCEK_FOTOGRAFLAR"
+LOG_DIR="$HOST_CASE/01_TRANSFER_LOG"
+REMOTE_BASE="/sdcard/Download/ShadowNexus_Cases/$CASE_ID"
+REMOTE_CASE_PHOTOS="$REMOTE_BASE/02_GERCEK_FOTOGRAFLAR"
+REMOTE_GALLERY="/sdcard/Pictures/ShadowNexus-Kestrel-V2"
+LOG_FILE="$LOG_DIR/GERCEK_FOTOGRAF_AKTARIM_TR.md"
+
+FILES=(
+  "Usb_flash_drive_on_a_laptop_closeup.jpg"
+  "Laptop-hard-drive-exposed.jpg"
+  "Datacenter_Rack.jpg"
+)
+METADATA_FILES=(
+  "FOTOGRAF_PROVENANSI_TR.csv"
+  "FOTOGRAF_PROVENANSI_TR.json"
+  "KULLANIM_VE_LISANS_TR.md"
+  "SHA256SUMS.txt"
+)
+
+die() {
+  printf 'HATA: %s\n' "$*" >&2
+  exit 1
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'EOF'
+Kullanım:
+  bash shadow-nexus/scripts/kestrel-v2-gercek-fotograflari-telefona-aktar
+
+Birden fazla cihaz bağlıysa:
+  SNX_ADB_SERIAL=CIHAZ_SERI bash shadow-nexus/scripts/kestrel-v2-gercek-fotograflari-telefona-aktar
+
+Ön koşul:
+  python3 shadow-nexus/scripts/kestrel-v2-gercek-fotograf-paketi-indir.py
+
+Bu araç yalnızca orijinal JPEG fotoğrafları ve lisans/provenans kayıtlarını kopyalar.
+Fotoğrafları kırpmaz, yeniden boyutlandırmaz, EXIF verisini değiştirmez.
+EOF
+  exit 0
+fi
+[[ $# -eq 0 ]] || die "Bilinmeyen argüman."
+
+command -v adb >/dev/null 2>&1 || die "ADB bulunamadı."
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum bulunamadı."
+[[ -d "$PHOTO_DIR" ]] || die "Fotoğraf paketi bulunamadı: $PHOTO_DIR"
+[[ -s "$PHOTO_DIR/FOTOGRAF_PROVENANSI_TR.csv" ]] || die "Provenans CSV dosyası eksik."
+[[ -s "$PHOTO_DIR/SHA256SUMS.txt" ]] || die "SHA-256 manifesti eksik."
+[[ ! -e "$LOG_FILE" ]] || die "Aktarım günlüğü zaten var; üzerine yazılmadı: $LOG_FILE"
+
+for file in "${FILES[@]}" "${METADATA_FILES[@]}"; do
+  [[ -s "$PHOTO_DIR/$file" ]] || die "Dosya eksik veya boş: $file"
+done
+
+(
+  cd "$PHOTO_DIR"
+  sha256sum --check --status SHA256SUMS.txt
+) || die "Bilgisayardaki fotoğraf paketi SHA-256 kontrolünü geçemedi."
+
+mapfile -t CONNECTED_SERIALS < <(adb devices | awk 'NR > 1 && $2 == "device" {print $1}')
+SERIAL="${SNX_ADB_SERIAL:-}"
+if [[ -z "$SERIAL" ]]; then
+  (("${#CONNECTED_SERIALS[@]}" == 1)) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}."
+  SERIAL="${CONNECTED_SERIALS[0]}"
+fi
+printf '%s\n' "${CONNECTED_SERIALS[@]}" | grep -Fxq -- "$SERIAL" || die "Seçilen ADB cihazı bağlı ve yetkili değil: $SERIAL"
+ADB=(adb -s "$SERIAL")
+[[ "$("${ADB[@]}" get-state 2>/dev/null | tr -d '\r')" == "device" ]] || die "ADB cihaz durumu hazır değil."
+
+"${ADB[@]}" shell "test ! -e '$REMOTE_CASE_PHOTOS'" || die "Telefonda vaka fotoğraf hedefi zaten var: $REMOTE_CASE_PHOTOS"
+"${ADB[@]}" shell "test ! -e '$REMOTE_GALLERY'" || die "Telefonda Galeri hedefi zaten var: $REMOTE_GALLERY"
+
+DEVICE_MODEL="$("${ADB[@]}" shell getprop ro.product.model | tr -d '\r')"
+ANDROID_VERSION="$("${ADB[@]}" shell getprop ro.build.version.release | tr -d '\r')"
+HOST_TIME="$(date -Is)"
+HOST_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+mkdir -p "$LOG_DIR"
+"${ADB[@]}" shell mkdir -p "$REMOTE_CASE_PHOTOS" "$REMOTE_GALLERY"
+
+cat > "$LOG_FILE" <<EOF
+# Kestrel V2 — Orijinal Fotoğraf Aktarım Kaydı
+
+| Alan | Değer |
+|---|---|
+| Vaka | $CASE_ID |
+| Sınıflandırma | DIŞ-KAYNAK / GERÇEK-FOTOĞRAF + GERÇEK-LAB-ETKİNLİĞİ aktarım kaydı |
+| Bilgisayar zamanı | $HOST_TIME |
+| Bilgisayar UTC | $HOST_UTC |
+| ADB seri numarası | $SERIAL |
+| Telefon modeli | $DEVICE_MODEL |
+| Android sürümü | $ANDROID_VERSION |
+| Kaynak | $PHOTO_DIR |
+| Telefonda vaka kopyası | $REMOTE_CASE_PHOTOS |
+| Galeri klasörü | $REMOTE_GALLERY |
+
+## Kaynak ve hedef SHA-256 doğrulaması
+
+| Dosya | Kaynak SHA-256 | Vaka klasörü | Galeri |
+|---|---|---|---|
+EOF
+
+for file in "${FILES[@]}"; do
+  source="$PHOTO_DIR/$file"
+  expected="$(sha256sum -- "$source" | awk '{print $1}')"
+
+  "${ADB[@]}" push "$source" "$REMOTE_CASE_PHOTOS/$file" >/dev/null
+  "${ADB[@]}" push "$source" "$REMOTE_GALLERY/$file" >/dev/null
+
+  case_hash="$("${ADB[@]}" exec-out cat "$REMOTE_CASE_PHOTOS/$file" | sha256sum | awk '{print $1}')"
+  gallery_hash="$("${ADB[@]}" exec-out cat "$REMOTE_GALLERY/$file" | sha256sum | awk '{print $1}')"
+
+  [[ "$case_hash" == "$expected" ]] || die "Vaka klasörü SHA-256 uyuşmuyor: $file"
+  [[ "$gallery_hash" == "$expected" ]] || die "Galeri kopyası SHA-256 uyuşmuyor: $file"
+
+  printf '| %s | %s | EŞLEŞTİ | EŞLEŞTİ |\n' "$file" "$expected" >> "$LOG_FILE"
+  "${ADB[@]}" shell am broadcast \
+    -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+    -d "file://$REMOTE_GALLERY/$file" >/dev/null 2>&1 || true
+done
+
+for file in "${METADATA_FILES[@]}"; do
+  "${ADB[@]}" push "$PHOTO_DIR/$file" "$REMOTE_CASE_PHOTOS/$file" >/dev/null
+  expected="$(sha256sum -- "$PHOTO_DIR/$file" | awk '{print $1}')"
+  actual="$("${ADB[@]}" exec-out cat "$REMOTE_CASE_PHOTOS/$file" | sha256sum | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || die "Provenans dosyası SHA-256 uyuşmuyor: $file"
+done
+
+cat >> "$LOG_FILE" <<EOF
+
+## Sonuç ve sınırlamalar
+
+- Orijinal fotoğraf sayısı: ${#FILES[@]}
+- Her fotoğrafın bilgisayar, telefon vaka klasörü ve Galeri kopyası SHA-256 ile eşleşti.
+- Görseller kırpılmadı, birleştirilmedi, yeniden boyutlandırılmadı veya üzerine yazı eklenmedi.
+- Orijinal EXIF ve dosya baytları korundu.
+- Galeri için Media Scanner isteği gönderildi; Galeri uygulamasında görünürlük cihazın medya indekslemesine bağlıdır.
+- Fotoğraflar Redmi kamerasıyla çekilmemiştir; dış kaynaklı gerçek fotoğraflardır.
+- Fotoğraflar Kestrel olayının gerçek kanıtı değildir; yalnızca eğitim materyalidir.
+- V1 vaka klasörüne erişilmedi veya yazılmadı.
+- SMS/arama kayıtlarına, uygulama veritabanlarına veya sistem saatine dokunulmadı.
+EOF
+
+"${ADB[@]}" push "$LOG_FILE" "$REMOTE_BASE/01_TRANSFER_LOG/GERCEK_FOTOGRAF_AKTARIM_TR.md" >/dev/null 2>&1 || true
+
+printf '\nBAŞARILI: Üç orijinal fotoğraf telefona aktarıldı.\n'
+printf 'Telefon vaka klasörü: %s\n' "$REMOTE_CASE_PHOTOS"
+printf 'Galeri klasörü: %s\n' "$REMOTE_GALLERY"
+printf 'Aktarım günlüğü: %s\n' "$LOG_FILE"
+printf 'Not: EXIF korunmuştur; fotoğraflar Redmi ile çekilmiş gibi sunulmaz.\n'
