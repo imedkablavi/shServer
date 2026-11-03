@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CASE_ID="SNX-20261103-KESTREL-V2"
+SOURCE_DIR="$ROOT/scenarios/operation-kestrel-v2"
+HOST_BASE="${SNX_CASES_DIR:-$HOME/ShadowNexus_Cases}"
+HOST_CASE="$HOST_BASE/$CASE_ID"
+HOST_MATERIALS="$HOST_CASE/00_SENTETIK_MATERYALLER"
+HOST_LOG_DIR="$HOST_CASE/01_TRANSFER_LOG"
+REMOTE_BASE="/sdcard/Download/ShadowNexus_Cases/$CASE_ID"
+REMOTE_MATERIALS="$REMOTE_BASE/00_SENTETIK_MATERYALLER"
+REMOTE_LOG_DIR="$REMOTE_BASE/01_TRANSFER_LOG"
+
+FILES=(
+  "README_TR.md"
+  "V2_TASARIM_NOTU_TR.md"
+  "KARAKTERLER_V2_SIMULATED.csv"
+  "MESAJLASMA_V2_SIMULATED.csv"
+  "OLAY_ZAMAN_CIZELGESI_V2_SIMULATED.csv"
+  "KANIT_KAYNAK_REHBERI_V2_TR.md"
+)
+
+usage() {
+  cat <<'EOF'
+Kullanım:
+  bash shadow-nexus/scripts/kestrel-v2-telefon-materyali-aktar
+
+Birden fazla ADB cihazı bağlıysa seri numarasını belirtin:
+  SNX_ADB_SERIAL=CIHAZ_SERI bash shadow-nexus/scripts/kestrel-v2-telefon-materyali-aktar
+
+İsteğe bağlı bilgisayar vaka kökü:
+  SNX_CASES_DIR="$HOME/ShadowNexus_Cases" bash shadow-nexus/scripts/kestrel-v2-telefon-materyali-aktar
+
+Bu betik yalnızca V2 eğitim dosyalarını ve aktarım/hash günlüklerini kopyalar.
+Root, uygulama veritabanı yazımı, silme, sistem saati değiştirme veya ağ erişimi yapmaz.
+EOF
+}
+
+die() {
+  printf 'HATA: %s\n' "$*" >&2
+  exit 1
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+[[ $# -eq 0 ]] || die "Bilinmeyen argüman. Yardım için --help kullanın."
+
+command -v adb >/dev/null 2>&1 || die "ADB bulunamadı."
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum bulunamadı."
+[[ -d "$SOURCE_DIR" ]] || die "V2 kaynak klasörü bulunamadı: $SOURCE_DIR"
+
+for file in "${FILES[@]}"; do
+  [[ -s "$SOURCE_DIR/$file" ]] || die "Kaynak dosya eksik veya boş: $file"
+done
+
+[[ ! -e "$HOST_CASE" ]] || die "Bilgisayar vaka klasörü zaten var; üzerine yazılmadı: $HOST_CASE"
+
+mapfile -t CONNECTED_SERIALS < <(adb devices | awk 'NR > 1 && $2 == "device" {print $1}')
+SERIAL="${SNX_ADB_SERIAL:-}"
+if [[ -z "$SERIAL" ]]; then
+  (("${#CONNECTED_SERIALS[@]}" == 1)) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}. Çoklu cihazda SNX_ADB_SERIAL kullanın."
+  SERIAL="${CONNECTED_SERIALS[0]}"
+fi
+printf '%s\n' "${CONNECTED_SERIALS[@]}" | grep -Fxq -- "$SERIAL" || die "Seçilen cihaz yetkili ve bağlı ADB cihazları arasında değil: $SERIAL"
+
+ADB=(adb -s "$SERIAL")
+[[ "$("${ADB[@]}" get-state 2>/dev/null | tr -d '\r')" == "device" ]] || die "ADB cihaz durumu hazır değil."
+
+if "${ADB[@]}" shell "test -e '$REMOTE_BASE'"; then
+  die "Telefonda hedef klasör zaten var; üzerine yazılmadı: $REMOTE_BASE"
+fi
+
+DEVICE_MODEL="$("${ADB[@]}" shell getprop ro.product.model | tr -d '\r')"
+ANDROID_VERSION="$("${ADB[@]}" shell getprop ro.build.version.release | tr -d '\r')"
+BUILD_ID="$("${ADB[@]}" shell getprop ro.build.display.id | tr -d '\r')"
+PHONE_TIME="$("${ADB[@]}" shell date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null | tr -d '\r' || true)"
+HOST_TIME="$(date -Is)"
+HOST_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+mkdir -p "$HOST_MATERIALS" "$HOST_LOG_DIR"
+for file in "${FILES[@]}"; do
+  cp -p -- "$SOURCE_DIR/$file" "$HOST_MATERIALS/$file"
+done
+
+LOG_FILE="$HOST_LOG_DIR/TRANSFER_LOG_TR.md"
+MANIFEST="$HOST_LOG_DIR/SHA256SUMS_HOST.txt"
+
+cat > "$LOG_FILE" <<EOF
+# Kestrel V2 — Telefon Materyali Aktarım Kaydı
+
+| Alan | Değer |
+|---|---|
+| Vaka/çalışma kimliği | $CASE_ID |
+| Sınıflandırma | SENTETİK-SENARYO dosyaları + GERÇEK-LAB-ETKİNLİĞİ aktarım kaydı |
+| Bilgisayar yerel zamanı | $HOST_TIME |
+| Bilgisayar UTC zamanı | $HOST_UTC |
+| Telefon zamanı (salt okunur gözlem) | ${PHONE_TIME:-Alınamadı} |
+| ADB seri numarası | $SERIAL |
+| Telefon modeli | $DEVICE_MODEL |
+| Android sürümü | $ANDROID_VERSION |
+| Derleme kimliği | $BUILD_ID |
+| Bilgisayar kaynak yolu | $SOURCE_DIR |
+| Bilgisayar kopyası | $HOST_MATERIALS |
+| Telefon hedefi | $REMOTE_MATERIALS |
+
+## İşlem kapsamı
+
+Bu işlem altı V2 eğitim dosyasını normal dosya aktarımıyla telefona kopyalar. Uygulama özel veritabanlarına yazmaz; SMS, arama kaydı, WhatsApp veya Telegram kaydı üretmez. Root, silme, sistem saati değiştirme ve harici ağ erişimi yapılmaz.
+
+## Kaynak dosyalar ve SHA-256
+
+| Dosya | SHA-256 | Telefona kopya doğrulaması |
+|---|---|---|
+EOF
+
+"${ADB[@]}" shell mkdir -p "$REMOTE_MATERIALS" "$REMOTE_LOG_DIR"
+
+for file in "${FILES[@]}"; do
+  source="$HOST_MATERIALS/$file"
+  expected="$(sha256sum -- "$source" | awk '{print $1}')"
+  "${ADB[@]}" push "$source" "$REMOTE_MATERIALS/$file" >/dev/null
+  actual="$("${ADB[@]}" exec-out cat "$REMOTE_MATERIALS/$file" | sha256sum | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || die "Telefondaki SHA-256 uyuşmuyor: $file"
+  printf '| %s | %s | EŞLEŞTİ |\n' "$file" "$expected" >> "$LOG_FILE"
+done
+
+cat >> "$LOG_FILE" <<EOF
+
+## Sonuç
+
+Altı V2 senaryo dosyası telefona kopyalandı ve bilgisayar üzerinden okunan içeriklerin SHA-256 değerleri kaynak dosyalarla eşleşti. Bu doğrulama dosya bütünlüğünü destekler; dosyaların native uygulama kaydı olduğunu veya senaryo iddialarının gerçekliğini göstermez.
+
+- Aktarım sonucu: BAŞARILI
+- Dosya sayısı: ${#FILES[@]}
+- V1 vaka klasörüne erişilmedi veya yazılmadı.
+- Telefonun sistem saati değiştirilmedi.
+- Root veya uygulama veritabanı işlemi yapılmadı.
+EOF
+
+(
+  cd "$HOST_CASE"
+  find 00_SENTETIK_MATERYALLER 01_TRANSFER_LOG -type f ! -name "SHA256SUMS_HOST.txt" -print0 |
+    sort -z |
+    xargs -0 sha256sum > "$MANIFEST"
+)
+
+"${ADB[@]}" push "$LOG_FILE" "$REMOTE_LOG_DIR/TRANSFER_LOG_TR.md" >/dev/null
+"${ADB[@]}" push "$MANIFEST" "$REMOTE_LOG_DIR/SHA256SUMS_HOST.txt" >/dev/null
+
+for file in "TRANSFER_LOG_TR.md" "SHA256SUMS_HOST.txt"; do
+  case "$file" in
+    TRANSFER_LOG_TR.md) local_file="$LOG_FILE" ;;
+    SHA256SUMS_HOST.txt) local_file="$MANIFEST" ;;
+  esac
+  expected="$(sha256sum -- "$local_file" | awk '{print $1}')"
+  actual="$("${ADB[@]}" exec-out cat "$REMOTE_LOG_DIR/$file" | sha256sum | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || die "Telefon aktarım günlüğü doğrulanamadı: $file"
+done
+
+printf '\nBAŞARILI: Kestrel V2 materyalleri telefona aktarıldı.\n'
+printf 'Bilgisayar vaka klasörü: %s\n' "$HOST_CASE"
+printf 'Telefon klasörü: %s\n' "$REMOTE_BASE"
+printf 'Dosya sayısı: %s\n' "${#FILES[@]}"
+printf 'SHA-256 manifesti: %s\n' "$MANIFEST"
+printf 'Not: V1 değiştirilmedi; gerçek Oxygen edinimi henüz yapılmadı.\n'
