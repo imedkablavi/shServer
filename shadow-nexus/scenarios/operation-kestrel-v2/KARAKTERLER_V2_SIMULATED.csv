@@ -1,0 +1,7 @@
+record_id,record_type,display_name,role_or_description,related_record_id,mapping_status,source_classification,notes
+P-001,PERSON,Deniz Arslan,Kurgusal telefon kullanıcısı / olayla ilişkili kişi,,CANONICAL_V2,SENTETIK-SENARYO,Gerçek kişi değildir; eğitim amacıyla üretilmiştir
+P-002,PERSON,Kerem Yilmaz,Kurgusal iletişim kişisi,,CANONICAL_V2,SENTETIK-SENARYO,Gerçek kişi değildir; eğitim amacıyla üretilmiştir
+P-003,PERSON,Selin Kaya,Kurgusal BT koordinatörü,,CANONICAL_V2,SENTETIK-SENARYO,Gerçek kişi değildir; eğitim amacıyla üretilmiştir
+AC-001,SYSTEM_ACCOUNT,root@c2,Kurgusal hesap/etiket,,UNRESOLVED,SENTETIK-SENARYO,İnsan kimliği değildir; kişiyle eşleştirilmemelidir
+AL-001,LEGACY_ALIAS,Shadow,Önceki görsel taslaktaki takma ad,P-001,PROPOSED_PENDING_APPROVAL,SENTETIK-SENARYO,Deniz Arslan ile eşleştirme öneridir; onaylanana kadar kesin kabul edilmez
+AL-002,LEGACY_ALIAS,Kemal (H),Önceki görsel taslaktaki iletişim adı,P-002,PROPOSED_PENDING_APPROVAL,SENTETIK-SENARYO,Kerem Yilmaz ile eşleştirme öneridir; onaylanana kadar kesin kabul edilmez
