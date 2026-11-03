@@ -162,6 +162,14 @@ def main() -> int:
     try:
         for asset in ASSETS:
             info = commons_info(asset)
+            if asset["expected_author"].lower() not in str(info["author"]).lower():
+                raise RuntimeError(
+                    f"Yazar metaverisi beklenen kaynakla uyuşmuyor: {asset['file']}"
+                )
+            if asset["expected_license"].lower() not in str(info["license"]).lower():
+                raise RuntimeError(
+                    f"Lisans metaverisi beklenen kaynakla uyuşmuyor: {asset['file']}"
+                )
             data = download_bytes(str(info["download_url"]))
             actual_sha1 = sha1_mediawiki(data)
             expected_sha1 = str(info["commons_sha1"])
