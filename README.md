@@ -32,3 +32,12 @@ Mevcut scripts/usb-forensics aracı telefon eğitim modülünden bağımsızdır
 - SENTETİK-SENARYO: kurgusal eğitim kişileri, olayları ve belgeleri.
 - DIŞ-KAYNAK: lisansı ve kaynağı kaydedilmiş, dışarıdan alınan materyal.
 - ÇIKARILAN-KANIT: yalnızca Oxygen raporunda gerçekten görülen kayıt.
+
+## Operation Kestrel — Vaka Belgeleri
+
+Önceki sunucu ihlali senaryosunun devamı ve Root öncesi / Root sonrası karşılaştırmalı inceleme planı:
+- [Vaka dosyası](shadow-nexus/scenarios/operation-kestrel/VAKA_DOSYASI_TR.md)
+- [Kanıt matrisi](shadow-nexus/scenarios/operation-kestrel/KANIT_MATRISI_TR.md)
+- [Uygulama ve karşılaştırma planı](shadow-nexus/scenarios/operation-kestrel/UYGULAMA_PLANI_TR.md)
+
+Bu belgeler kurgusal olayları gerçek laboratuvar etkinliğinden ve Oxygen tarafından gerçekten çıkarılan kanıtlardan ayırır.
