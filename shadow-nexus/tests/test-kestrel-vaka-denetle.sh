@@ -50,7 +50,7 @@ grep -q "09_PHONE_COPY — telefondan alınan kopya" "$TMP/denetim-ilk.txt"
 grep -q "Telefon etkinliği SQLite kopyası sağlam" "$TMP/denetim-ilk.txt"
 
 printf 'bozulma\n' >> "$TMP/09_PHONE_COPY/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json"
-if bash "$AUDIT" "$TMP" > "$TMP/denetim-bozuk.txt"; then
+if bash "$AUDIT" "$TMP" > "$TMP/denetim-bozuk.txt" 2> "$TMP/denetim-bozuk.stderr"; then
   echo "HATA: Değiştirilmiş dosyanın hash kontrolü başarısız olmadı." >&2
   exit 1
 fi
