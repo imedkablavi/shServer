@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CASE_ID="SNX-20261103-KESTREL-V2"
 SOURCE_DIR="$ROOT/scenarios/operation-kestrel-v2"
 HOST_BASE="${SNX_CASES_DIR:-$HOME/ShadowNexus_Cases}"
@@ -61,7 +61,7 @@ done
 mapfile -t CONNECTED_SERIALS < <(adb devices | awk 'NR > 1 && $2 == "device" {print $1}')
 SERIAL="${SNX_ADB_SERIAL:-}"
 if [[ -z "$SERIAL" ]]; then
-  (("${#CONNECTED_SERIALS[@]}" == 1)) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}. Çoklu cihazda SNX_ADB_SERIAL kullanın."
+  ((${#CONNECTED_SERIALS[@]} == 1)) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}. Çoklu cihazda SNX_ADB_SERIAL kullanın."
   SERIAL="${CONNECTED_SERIALS[0]}"
 fi
 printf '%s\n' "${CONNECTED_SERIALS[@]}" | grep -Fxq -- "$SERIAL" || die "Seçilen cihaz yetkili ve bağlı ADB cihazları arasında değil: $SERIAL"
