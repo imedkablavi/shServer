@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CASE_ID="SNX-20261103-KESTREL-V2"
+REMOTE_CAMERA="/sdcard/DCIM/Camera"
+HOST_BASE="${SNX_CASES_DIR:-$HOME/ShadowNexus_Cases}"
+HOST_CASE="$HOST_BASE/$CASE_ID"
+OUTPUT_DIR="$HOST_CASE/03_CIHAZ_KAMERA_CEKIMLERI"
+LOG_DIR="$HOST_CASE/01_TRANSFER_LOG"
+LOG_FILE="$LOG_DIR/CIHAZ_KAMERA_CEKIMLERI_TR.md"
+MANIFEST="$OUTPUT_DIR/SHA256SUMS.txt"
+
+die() {
+  printf 'HATA: %s\n' "$*" >&2
+  exit 1
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'EOF'
+Kullanım:
+  bash shadow-nexus/scripts/kestrel-v2-cihaz-kamera-fotograflarini-al
+
+Birden fazla ADB cihazı bağlıysa:
+  SNX_ADB_SERIAL=CIHAZ_SERI bash shadow-nexus/scripts/kestrel-v2-cihaz-kamera-fotograflarini-al
+
+Önce Redmi Camera uygulamasıyla gerçek sahne fotoğrafları çekin.
+Bu araç yalnızca /sdcard/DCIM/Camera içinden sizin seçtiğiniz görüntüleri
+bilgisayara kopyalar; kaynağı silmez ve görüntüleri değiştirmez.
+EOF
+  exit 0
+fi
+[[ $# -eq 0 ]] || die "Bilinmeyen argüman."
+
+command -v adb >/dev/null 2>&1 || die "ADB bulunamadı."
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum bulunamadı."
+
+mapfile -t CONNECTED_SERIALS < <(adb devices | awk 'NR > 1 && $2 == "device" {print $1}')
+SERIAL="${SNX_ADB_SERIAL:-}"
+if [[ -z "$SERIAL" ]]; then
+  (( ${#CONNECTED_SERIALS[@]} == 1 )) || die "Tam olarak bir yetkili ADB cihazı bağlı olmalı. Bulunan: ${#CONNECTED_SERIALS[@]}."
+  SERIAL="${CONNECTED_SERIALS[0]}"
+fi
+printf '%s\n' "${CONNECTED_SERIALS[@]}" | grep -Fxq -- "$SERIAL" || die "Seçilen ADB cihazı bağlı ve yetkili değil: $SERIAL"
+ADB=(adb -s "$SERIAL")
+[[ "$("${ADB[@]}" get-state 2>/dev/null | tr -d '\r')" == "device" ]] || die "ADB cihaz durumu hazır değil."
+"${ADB[@]}" shell "test -d '$REMOTE_CAMERA'" || die "Kamera klasörü bulunamadı: $REMOTE_CAMERA"
+
+mapfile -t REMOTE_FILES < <(
+  "${ADB[@]}" shell "find '$REMOTE_CAMERA' -maxdepth 1 -type f 2>/dev/null" |
+    tr -d '\r' |
+    grep -Ei '\.(jpg|jpeg|heic|heif|png|webp)$' |
+    sort
+)
+(("${#REMOTE_FILES[@]}" > 0)) || die "Kamera klasöründe desteklenen görüntü dosyası bulunamadı."
+
+printf '\nKamera klasöründeki görüntü dosyaları:\n'
+for i in "${!REMOTE_FILES[@]}"; do
+  printf '  %2d) %s\n' "$((i+1))" "${REMOTE_FILES[$i]##*/}"
+done
+
+printf '\nYalnızca bu proje için çektiğiniz sahne fotoğraflarını seçin.\n'
+printf 'Seçim numaraları (ör. 1 3 5): '
+read -r SELECTION
+[[ -n "$SELECTION" ]] || die "Herhangi bir fotoğraf seçilmedi."
+
+declare -A SELECTED=()
+for token in $SELECTION; do
+  [[ "$token" =~ ^[0-9]+$ ]] || die "Geçersiz seçim: $token"
+  index=$((token-1))
+  (( index >= 0 && index < ${#REMOTE_FILES[@]} )) || die "Seçim numarası aralık dışında: $token"
+  SELECTED[$index]=1
+done
+
+(("${#SELECTED[@]}" > 0)) || die "Seçim boş."
+[[ ! -e "$OUTPUT_DIR" ]] || die "Hedef klasör zaten var; üzerine yazılmadı: $OUTPUT_DIR"
+
+printf '\nSeçilen %s fotoğraf kopyalanacak. Kaynaklar silinmeyecek.\n' "${#SELECTED[@]}"
+printf 'Devam etmek için EVET yazın: '
+read -r CONFIRM
+[[ "$CONFIRM" == "EVET" ]] || die "Kullanıcı işlemi iptal etti."
+
+DEVICE_MODEL="$("${ADB[@]}" shell getprop ro.product.model | tr -d '\r')"
+ANDROID_VERSION="$("${ADB[@]}" shell getprop ro.build.version.release | tr -d '\r')"
+HOST_TIME="$(date -Is)"
+HOST_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
+
+LOG_TMP="$OUTPUT_DIR/.camera-capture-log.tmp"
+cat > "$LOG_TMP" <<EOF
+# Kestrel V2 — Cihaz Kamerasıyla Çekilen Fotoğraflar
+
+| Alan | Değer |
+|---|---|
+| Vaka | $CASE_ID |
+| Sınıflandırma | GERÇEK-CIHAZ / GERÇEK-LAB-ETKİNLİĞİ |
+| Bilgisayar yerel zamanı | $HOST_TIME |
+| Bilgisayar UTC zamanı | $HOST_UTC |
+| ADB seri numarası | $SERIAL |
+| Cihaz modeli | $DEVICE_MODEL |
+| Android sürümü | $ANDROID_VERSION |
+| Kaynak | $REMOTE_CAMERA |
+| Bilgisayar kopyası | $OUTPUT_DIR |
+
+## Provenans kuralları
+
+Bu araç kaynak fotoğrafları değiştirmez, yeniden sıkıştırmaz, yeniden adlandırmaz veya metadata/EXIF alanlarına yazmaz. Yalnızca seçilen dosyaları kopyalar. Kaynak dosyalar telefonda bırakılır.
+
+Dosya sisteminin değiştirilme zamanı tek başına fotoğrafın çekim zamanını ispatlamaz. EXIF bilgisi varsa ayrıca incelenir; bu bilgiler de bağımsız doğrulama olmadan olay yeri kanıtı sayılmaz.
+
+## Seçilen dosyalar
+
+| Kaynak dosya | Boyut (bayt) | Kaynak mtime | SHA-256 | Kopya doğrulaması |
+|---|---:|---|---|---|
+EOF
+
+for index in "${!REMOTE_FILES[@]}"; do
+  [[ -n "${SELECTED[$index]:-}" ]] || continue
+  REMOTE_PATH="${REMOTE_FILES[$index]}"
+  NAME="${REMOTE_PATH##*/}"
+  [[ "$NAME" =~ ^[A-Za-z0-9_. -]+$ ]] || die "Güvenlik nedeniyle desteklenmeyen dosya adı: $NAME"
+
+  DEVICE_META="$("${ADB[@]}" shell "stat -c '%s|%y' '$REMOTE_PATH'" 2>/dev/null | tr -d '\r' || true)"
+  DEVICE_SIZE="${DEVICE_META%%|*}"
+  DEVICE_MTIME="${DEVICE_META#*|}"
+  [[ "$DEVICE_SIZE" =~ ^[0-9]+$ ]] || die "Kaynak dosya boyutu okunamadı: $NAME"
+
+  REMOTE_SHA="$("${ADB[@]}" shell "sha256sum '$REMOTE_PATH'" | awk '{print $1}' | tr -d '\r')"
+  [[ "$REMOTE_SHA" =~ ^[a-fA-F0-9]{64}$ ]] || die "Kaynak SHA-256 alınamadı: $NAME"
+
+  DEST="$OUTPUT_DIR/$NAME"
+  [[ ! -e "$DEST" ]] || die "Hedef dosya zaten var: $DEST"
+  "${ADB[@]}" pull "$REMOTE_PATH" "$DEST" >/dev/null
+
+  LOCAL_SHA="$(sha256sum -- "$DEST" | awk '{print $1}')"
+  [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]] || die "SHA-256 eşleşmiyor: $NAME"
+  LOCAL_SIZE="$(stat -c '%s' "$DEST")"
+  [[ "$LOCAL_SIZE" == "$DEVICE_SIZE" ]] || die "Dosya boyutu eşleşmiyor: $NAME"
+
+  printf '| %s | %s | %s | %s | EŞLEŞTİ |\n' "$NAME" "$DEVICE_SIZE" "$DEVICE_MTIME" "$LOCAL_SHA" >> "$LOG_TMP"
+done
+
+mv "$LOG_TMP" "$OUTPUT_DIR/CIHAZ_KAMERA_CEKIMLERI_TR.md"
+(
+  cd "$OUTPUT_DIR"
+  find . -maxdepth 1 -type f ! -name "SHA256SUMS.txt" -print0 |
+    sort -z |
+    xargs -0 sha256sum > "$MANIFEST"
+)
+
+{
+  printf '# Kestrel V2 — Cihaz Kamerası Fotoğrafı Alma Kaydı\n\n'
+  printf 'Bilgisayar kopyası: %s\n\n' "$OUTPUT_DIR"
+  printf 'Kaynak dosyalar telefondan silinmemiştir. SHA-256 ve boyut doğrulaması yapılmıştır.\n'
+  printf 'Bu fotoğraflar gerçek Redmi kamera dosyalarıdır; sahnelenmiş materyalin fotoğrafı olabilir ve tek başına kurgusal olayın gerçekliğini kanıtlamaz.\n'
+  printf 'Manifest: %s\n' "$MANIFEST"
+} > "$LOG_FILE"
+
+printf '\nBAŞARILI: %s gerçek cihaz kamera dosyası kopyalandı ve doğrulandı.\n' "${#SELECTED[@]}"
+printf 'Bilgisayar klasörü: %s\n' "$OUTPUT_DIR"
+printf 'Manifest: %s\n' "$MANIFEST"
+printf 'Aktarım günlüğü: %s\n' "$LOG_FILE"
+printf 'Kaynak dosyalar telefonda korunmuştur.\n'
