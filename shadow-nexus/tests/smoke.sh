@@ -28,3 +28,5 @@ assert not (root / "README_AR.md").exists()
 assert not (root / "docs/SAFETY_AND_CLASSIFICATION_AR.md").exists()
 print("Shadow Nexus denetimleri başarılı.")
 PY
+bash -n "$ROOT/scripts/kestrel-vaka-denetle"
+bash "$ROOT/tests/test-kestrel-vaka-denetle.sh"
