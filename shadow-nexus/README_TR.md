@@ -70,3 +70,19 @@ Bir dosyanın telefona kaydedilmiş olması, Oxygen tarafından kesinlikle çık
 - [Root öncesi / Root sonrası uygulama planı](scenarios/operation-kestrel/UYGULAMA_PLANI_TR.md)
 
 Gerçek laboratuvar etkinliği, sentetik senaryo içeriği ve Oxygen'den çıkarılan kanıtlar ayrı sınıflandırılır. Root öncesi Oxygen edinimi tamamlanıp doğrulanmadan Root aşamasına geçilmez.
+
+### Ana vaka dosyasını denetleme
+
+Önceki Operation Kestrel vaka klasörünü değiştirmeden denetlemek için:
+
+```bash
+bash shadow-nexus/scripts/kestrel-vaka-denetle
+```
+
+Farklı bir konum kullanılıyorsa tam yol verilebilir:
+
+```bash
+bash shadow-nexus/scripts/kestrel-vaka-denetle "/tam/yol/SNX-20261101-043455"
+```
+
+Bu komut dosya envanterini, `run_summary.json` biçimini ve varsa SHA-256 manifestlerini salt okunur olarak kontrol eder. Eksik dosyalar uyarı olarak raporlanır; hash uyuşmazlığı hata üretir.
