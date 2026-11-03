@@ -402,7 +402,7 @@ public class MainActivity extends Activity {
         String[] names = new String[] {
             "Usb_flash_drive_on_a_laptop_closeup.jpg",
             "Laptop-hard-drive-exposed.jpg",
-            "Datacenter_Rack.jpg"
+            "Wikimedia_Servers-0001_44.jpg"
         };
         String[] paths = new String[names.length];
         String[] mimeTypes = new String[names.length];
