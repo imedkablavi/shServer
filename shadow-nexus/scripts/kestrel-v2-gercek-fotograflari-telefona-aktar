@@ -146,7 +146,11 @@ cat >> "$LOG_FILE" <<EOF
 - SMS/arama kayıtlarına, uygulama veritabanlarına veya sistem saatine dokunulmadı.
 EOF
 
-"${ADB[@]}" push "$LOG_FILE" "$REMOTE_BASE/01_TRANSFER_LOG/GERCEK_FOTOGRAF_AKTARIM_TR.md" >/dev/null 2>&1 || true
+REMOTE_LOG="$REMOTE_BASE/01_TRANSFER_LOG/GERCEK_FOTOGRAF_AKTARIM_TR.md"
+"${ADB[@]}" push "$LOG_FILE" "$REMOTE_LOG" >/dev/null
+expected="$(sha256sum -- "$LOG_FILE" | awk '{print $1}')"
+actual="$("${ADB[@]}" exec-out cat "$REMOTE_LOG" | sha256sum | awk '{print $1}')"
+[[ "$actual" == "$expected" ]] || die "Telefon aktarım günlüğü SHA-256 doğrulaması başarısız."
 
 printf '\nBAŞARILI: Üç orijinal fotoğraf telefona aktarıldı.\n'
 printf 'Telefon vaka klasörü: %s\n' "$REMOTE_CASE_PHOTOS"
