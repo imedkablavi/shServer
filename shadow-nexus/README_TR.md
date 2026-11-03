@@ -141,3 +141,38 @@ SNX_ADB_SERIAL=CIHAZ_SERI bash shadow-nexus/scripts/kestrel-v2-telefon-materyali
 Betiğin oluşturduğu bilgisayar vaka klasörü `$HOME/ShadowNexus_Cases/SNX-20261103-KESTREL-V2`, telefon klasörü ise `/sdcard/Download/ShadowNexus_Cases/SNX-20261103-KESTREL-V2` olur. Altı V2 dosyası kopyalanır, kaynak ve hedef SHA-256 değerleri karşılaştırılır, aktarım günlüğü ve manifest iki tarafta saklanır. Hedef klasörlerden biri zaten varsa betik üzerine yazmak yerine durur.
 
 Bu işlem gerçek laboratuvar aktarımıdır; aktarılan içeriklerin tümü SENTETİK-SENARYO olarak kalır. V1 vaka klasörüne, uygulama veritabanlarına veya sistem saatine dokunulmaz. Betik Root veya Oxygen edinimi yapmaz.
+
+
+### Kestrel V2 — Türkçe iletişim verileri ve gerçek fotoğraf paketi
+
+V2 Android uygulaması beş Türkçe eğitim kişisi içerir. Kişi kartları kullanıcı onayıyla Android Rehber ekranında açılır; telefon alanları bilerek geçersiz yer tutuculardır, e-posta alanları `example.invalid` kullanır.
+
+Gerçek SMS/arama kayıtları sentetik satır enjeksiyonu ile oluşturulmaz. Uygulama, yalnızca araştırmacının kendi kontrolündeki ikinci test hattına ait numarayı girerek varsayılan SMS/Telefon uygulamasını açar. Gönderim veya arama kullanıcının onayını gerektirir. Gelen arama/SMS için ikinci cihazdan gerçek işlem yapılır. Ayrıntılar:
+- [Gerçek SMS ve arama test planı](scenarios/operation-kestrel-v2/GERCEK_ILETISIM_TEST_PLANI_V2_TR.md)
+
+### Lisanslı orijinal fotoğraflar
+
+Kestrel V2 için AI ile oluşturulmuş veya birleştirilmiş görsel yerine üç özgün Wikimedia Commons JPEG kaynağı kullanılır. Kaynak, yazar, lisans, özgün boyut ve SHA-256 bilgileri ayrı manifestte tutulur:
+- [Gerçek fotoğraf kaynakları ve lisanslar](scenarios/operation-kestrel-v2/GERCEK_FOTOGRAF_KAYNAKLARI_V2_TR.md)
+
+İndir:
+
+```bash
+python3 shadow-nexus/scripts/kestrel-v2-gercek-fotograf-paketi-indir.py
+```
+
+Telefona aktar ve SHA-256 değerlerini doğrula:
+
+```bash
+bash shadow-nexus/scripts/kestrel-v2-gercek-fotograflari-telefona-aktar
+```
+
+Uygulamayı yeniden derledikten sonra **Aktarılan fotoğrafları Galeri'ye tanıt** seçeneğini kullanın. Fotoğraf dosyaları değiştirilmez; EXIF korunur. Bunlar Redmi ile çekilmiş fotoğraflar veya Kestrel olayının gerçek kanıtları değildir.
+
+### İletişim ve fotoğraf bütünlüğü
+
+- V2 mesaj CSV dosyaları ve karakter kayıtları SENTETİK-SENARYO olarak kalır.
+- Gerçek SMS/çağrı işlemi varsa GERÇEK-LAB-ETKİNLİĞİ olarak gerçek zamanında kaydedilir.
+- Uygulama SMS/Call Log veri tabanına doğrudan yazmaz ve bunlar için özel izin istemez.
+- Fotoğraf kaynağı DIŞ-KAYNAK / GERÇEK-FOTOĞRAF; dosya aktarımı GERÇEK-LAB-ETKİNLİĞİ olarak ayrı kaydedilir.
+- Root öncesi Oxygen edinimi tamamlanmadan Root'a geçilmez.
