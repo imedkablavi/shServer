@@ -102,3 +102,10 @@ bash shadow-nexus/scripts/kestrel-senaryo-incele "/tam/yol/SNX-20261101-043455"
 ```
 
 Bu araç ağ bağlantısı kurmaz, telefona erişmez ve dosya oluşturmaz. İletişim veri tabanını açıkça `SENTETİK-SENARYO`, gerçek yerel portal günlüklerini `GERÇEK-LAB-ETKİNLİĞİ` olarak değerlendirir. Hassas nitelikli sütunlar çıktıda gizlenir.
+
+### Mevcut vaka içeriği ve kanıt boşlukları
+
+İlk denetim çıktısına dayalı içerik incelemesi ve tutarlılık uyarıları:
+- [Mevcut veri incelemesi ve tutarlılık açıkları](scenarios/operation-kestrel/MEVCUT_VERI_INCELEMESI_TR.md)
+
+Bu inceleme, mevcut telefon etkinliğinin yalnızca yerel eğitim portalına erişimi doğruladığını ve önceki görseldeki sunucu ihlali anlatısıyla mevcut iletişim veri kümesi arasında henüz eşleşme olmadığını açıklar. V1 vaka verileri değiştirilmeden korunur.
