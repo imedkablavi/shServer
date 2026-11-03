@@ -17,10 +17,11 @@ Kullanım:
 Bu araç:
 - vaka dosyalarını listeler;
 - run_summary.json dosyasının JSON biçimini denetler;
-- mevcut SHA256SUMS.txt ve MASTER_SHA256SUMS manifestlerini doğrular;
-- bilinen gerçek-lab ve sentetik veri dosyalarının varlığını bildirir.
+- sentetik SQLite veri kümesinin bütünlüğünü salt okunur denetler;
+- telefon etkinliği JSON dosyasını bulunduğu gerçek yolda doğrular;
+- JSONL sunucu günlüğünü ve SHA-256 manifestlerini denetler.
 
-Telefonla bağlantı kurmaz ve hiçbir dosyayı değiştirmez.
+Telefonla bağlantı kurmaz ve hiçbir vaka dosyasını değiştirmez.
 EOF
 }
 
@@ -81,19 +82,125 @@ file_count="$(find "$CASE_DIR" -type f | wc -l | tr -d ' ')"
 printf 'Toplam dosya: %s\n' "$file_count"
 find "$CASE_DIR" -type f -printf '%P | %s bayt\n' | sort
 
-printf '\n===== BİLİNEN SENARYO DOSYALARI =====\n'
-for rel in \
-  "05_SCENARIO_DATA/scenario_communications_SIMULATED.sqlite3" \
-  "07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json" \
-  "07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl"
-do
-  if [[ -f "$CASE_DIR/$rel" ]]; then
-    printf '[BULUNDU] %s\n' "$rel"
+printf '\n===== BİLİNEN SENARYO VE ETKİNLİK DOSYALARI =====\n'
+
+scenario_db="$CASE_DIR/05_SCENARIO_DATA/scenario_communications_SIMULATED.sqlite3"
+if [[ -f "$scenario_db" ]]; then
+  if python3 - "$scenario_db" <<'PY'
+import sqlite3
+import sys
+
+path = sys.argv[1]
+try:
+    uri = "file:" + path.replace("?", "%3f") + "?mode=ro"
+    with sqlite3.connect(uri, uri=True) as db:
+        result = db.execute("PRAGMA integrity_check").fetchone()[0]
+        tables = [
+            row[0]
+            for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+        ]
+        if result != "ok":
+            print(f"[HATA] Sentetik SQLite bütünlük denetimi: {result}")
+            raise SystemExit(1)
+        print("[TAMAM] Sentetik iletişim SQLite veritabanı sağlam.")
+        print("  Sınıflandırma: SENTETİK-SENARYO")
+        print("  Tablolar: " + (", ".join(tables) if tables else "tablo bulunamadı"))
+except sqlite3.Error as exc:
+    print(f"[HATA] SQLite veritabanı okunamadı: {exc}")
+    raise SystemExit(1)
+PY
+  then
+    :
   else
-    printf '[UYARI] %s\n' "$rel"
-    warnings=$((warnings + 1))
+    failed=1
   fi
-done
+else
+  printf '[UYARI] 05_SCENARIO_DATA/scenario_communications_SIMULATED.sqlite3 bulunamadı.\n'
+  warnings=$((warnings + 1))
+fi
+
+phone_json="$CASE_DIR/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json"
+phone_json_source="ana vaka klasörü"
+if [[ ! -f "$phone_json" && -f "$CASE_DIR/09_PHONE_COPY/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json" ]]; then
+  phone_json="$CASE_DIR/09_PHONE_COPY/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.json"
+  phone_json_source="09_PHONE_COPY — telefondan alınan kopya"
+fi
+
+if [[ -f "$phone_json" ]]; then
+  if python3 - "$phone_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"[HATA] Telefon etkinliği JSON dosyası okunamadı: {exc}")
+    raise SystemExit(1)
+
+if not isinstance(data, (dict, list)):
+    print("[HATA] Telefon etkinliği JSON beklenen nesne/liste biçiminde değil.")
+    raise SystemExit(1)
+
+print("[TAMAM] Telefon etkinliği JSON biçimi geçerli.")
+PY
+  then
+    printf '[BULUNDU] %s\n' "${phone_json#"$CASE_DIR"/}"
+    printf '[BİLGİ] Kaynak konumu: %s\n' "$phone_json_source"
+  else
+    failed=1
+  fi
+else
+  printf '[UYARI] phone_network_activity_ACTUAL.json ana klasörde veya 09_PHONE_COPY altında bulunamadı.\n'
+  warnings=$((warnings + 1))
+fi
+
+server_log="$CASE_DIR/07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl"
+if [[ -f "$server_log" ]]; then
+  line_count="$(grep -cve '^[[:space:]]*$' "$server_log" || true)"
+  printf '[BULUNDU] 07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl (%s boş olmayan kayıt satırı)\n' "$line_count"
+else
+  printf '[UYARI] 07_PHONE_ACTIVITY/lab_server_access_ACTUAL.jsonl bulunamadı.\n'
+  warnings=$((warnings + 1))
+fi
+
+phone_db="$CASE_DIR/09_PHONE_COPY/07_PHONE_ACTIVITY/phone_network_activity_ACTUAL.sqlite3"
+if [[ -f "$phone_db" ]]; then
+  if python3 - "$phone_db" <<'PY'
+import sqlite3
+import sys
+
+path = sys.argv[1]
+try:
+    uri = "file:" + path.replace("?", "%3f") + "?mode=ro"
+    with sqlite3.connect(uri, uri=True) as db:
+        result = db.execute("PRAGMA integrity_check").fetchone()[0]
+        if result != "ok":
+            print(f"[HATA] Telefon etkinliği SQLite bütünlük denetimi: {result}")
+            raise SystemExit(1)
+        tables = [
+            row[0]
+            for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+        ]
+        print("[TAMAM] Telefon etkinliği SQLite kopyası sağlam.")
+        print("  Tablolar: " + (", ".join(tables) if tables else "tablo bulunamadı"))
+except sqlite3.Error as exc:
+    print(f"[HATA] Telefon etkinliği SQLite okunamadı: {exc}")
+    raise SystemExit(1)
+PY
+  then
+    :
+  else
+    failed=1
+  fi
+else
+  printf '[BİLGİ] Telefon etkinliği SQLite kopyası bulunamadı.\n'
+fi
 
 printf '\n===== SHA-256 MANİFESTLERİ =====\n'
 manifest_count=0
@@ -123,5 +230,5 @@ elif (( warnings != 0 )); then
   printf 'UYARI: Denetim tamamlandı; %s eksik veya doğrulanmamış öğe var.\n' "$warnings"
   exit 0
 else
-  printf 'BAŞARILI: Özet, bilinen dosyalar ve SHA-256 manifestleri denetlendi.\n'
+  printf 'BAŞARILI: Özet, veri dosyaları ve SHA-256 manifestleri denetlendi.\n'
 fi
