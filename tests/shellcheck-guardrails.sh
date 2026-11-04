@@ -36,6 +36,10 @@ grep -q 'imaj-3-format-sonrasi' "$ODEV_SCRIPT"
 grep -q 'imaj-4-guvenli-silme-sonrasi' "$ODEV_SCRIPT"
 grep -q 'python-pptx==1.0.2' "$DOCKERFILE"
 grep -q 'olustur-test-verileri.py' "$ODEV_SCRIPT"
+grep -q 'usb-\$BEKLENEN_SERI.lock' "$ODEV_SCRIPT"
+grep -q 'usb-\$EXPECTED_SERIAL.lock' "$SCRIPT"
+grep -q 'usb-forensics-assignment-tr:local' "$ODEV_SCRIPT"
+grep -q 'usb-forensics-tools:local' "$SCRIPT"
 grep -Fq 'CMD ["/bin/bash"]' "$DOCKERFILE"
 if grep -Eq 'FULL WORKFLOW COMPLETED SUCCESSFULLY|capture: command not found|fail: command not found' "$SCRIPT"; then
   echo "Known false-success pattern found." >&2
