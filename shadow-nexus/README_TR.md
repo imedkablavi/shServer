@@ -198,3 +198,11 @@ Samsung J7 örnek PDF raporunun bölüm sırası incelenerek Kestrel V2'ye özel
 - [Rapor yapısı, kanıt planı ve referans raporun uyarlama notları](scenarios/operation-kestrel-v2/RAPOR_YAPISI_VE_KANIT_PLANI_V2_TR.md)
 
 Bu belge referans rapordaki olay/cihaz fotoğrafları, teslim, Oxygen Android Agent, import/hash/zaman dilimi, Pre-Root, Root, Post-Root ve karşılaştırma bölümlerini Kestrel'e uyarlar. Samsung J7'ye özgü Odin/CF-Auto-Root/SuperSU adımlarının Redmi Note 13 Pro'da kullanılmaması gerektiğini açıklar. Ayrıca Android Agent ediniminin otomatik olarak fiziksel imaj sayılmaması ve bulut Access Token bilgilerinin gizli tutulması gerektiğini belirtir.
+
+
+### Redmi Note 13 Pro — gerçek cihaz rapor taslağı
+
+- [Redmi Note 13 Pro Dijital Adli İnceleme Raporu (Taslak)](scenarios/operation-kestrel-v2/RAPOR_TASLAGI_REDMI_NOTE_13_PRO_TR.md)
+- [Rapor yapısı ve kanıt planı](scenarios/operation-kestrel-v2/RAPOR_YAPISI_VE_KANIT_PLANI_V2_TR.md)
+
+Rapor taslağı önceki ADB/cihaz gözlemlerini başlangıç bilgisi olarak gösterir ve ilk oturumda yeniden doğrulanmasını ister. Oxygen sürümü, cihaz algılama, edinim yöntemi, çıkarım sonuçları, hash değerleri ve fiziksel durum fotoğrafları henüz tamamlanmamıştır. Bu alanlara gerçek çıktı gelmeden değer eklenmez.
