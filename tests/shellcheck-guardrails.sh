@@ -5,6 +5,7 @@ SCRIPT="$ROOT/scripts/usb-forensics"
 ODEV_SCRIPT="$ROOT/scripts/usb-forensics-odev-tr"
 DATA_GENERATOR="$ROOT/scripts/olustur-test-verileri.py"
 DOCKERFILE="$ROOT/Dockerfile"
+ASSIGNMENT_DOCKERFILE="$ROOT/Dockerfile.assignment"
 bash -n "$SCRIPT"
 bash -n "$ODEV_SCRIPT"
 python3 -m py_compile "$DATA_GENERATOR"
@@ -34,13 +35,19 @@ grep -q 'imaj-1-orijinal' "$ODEV_SCRIPT"
 grep -q 'imaj-2-silme-sonrasi' "$ODEV_SCRIPT"
 grep -q 'imaj-3-format-sonrasi' "$ODEV_SCRIPT"
 grep -q 'imaj-4-guvenli-silme-sonrasi' "$ODEV_SCRIPT"
-grep -q 'python-pptx==1.0.2' "$DOCKERFILE"
+grep -q 'python-pptx==1.0.2' "$ASSIGNMENT_DOCKERFILE"
+if grep -q 'python-pptx' "$DOCKERFILE"; then
+  echo "Assignment-only Python packages must not leak into the legacy Dockerfile." >&2
+  exit 1
+fi
 grep -q 'olustur-test-verileri.py' "$ODEV_SCRIPT"
 grep -q 'usb-\$BEKLENEN_SERI.lock' "$ODEV_SCRIPT"
 grep -q 'usb-\$EXPECTED_SERIAL.lock' "$SCRIPT"
 grep -q 'usb-forensics-assignment-tr:local' "$ODEV_SCRIPT"
 grep -q 'usb-forensics-tools:local' "$SCRIPT"
 grep -Fq 'CMD ["/bin/bash"]' "$DOCKERFILE"
+grep -Fq 'CMD ["/bin/bash"]' "$ASSIGNMENT_DOCKERFILE"
+grep -q 'Dockerfile.assignment' "$ODEV_SCRIPT"
 if grep -Eq 'FULL WORKFLOW COMPLETED SUCCESSFULLY|capture: command not found|fail: command not found' "$SCRIPT"; then
   echo "Known false-success pattern found." >&2
   exit 1
