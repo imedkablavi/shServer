@@ -57,7 +57,7 @@ OGRENCI_ADI="$(printf '%s' "$OGRENCI_ADI" | sed -E 's/[[:space:]]+/_/g')"
 [[ "$OGRENCI_ADI" =~ ^[[:alnum:]_-]{2,48}$ ]] || hata "Ad alanı geçersiz; boşluklar alt çizgiye çevrilir."
 
 mkdir -p "$KANIT_KOKU"
-CASE_DIR="$KANIT_KOKU/$OGRENCI_NO"_"$OGRENCI_ADI"_USB_Odevi_$(date -u +%Y%m%dT%H%M%S)
+CASE_DIR="${KANIT_KOKU}/${OGRENCI_NO}_${OGRENCI_ADI}_USB_Odevi_$(date -u +%Y%m%dT%H%M%S)"
 [[ ! -e "$CASE_DIR" ]] || hata "Kanıt klasörü zaten var; üzerine yazılmayacak: $CASE_DIR"
 IMAJ_DIR="$CASE_DIR/imajlar"; HASH_DIR="$CASE_DIR/hashler"; LOG_DIR="$CASE_DIR/gunlukler"
 EKRAN_DIR="$CASE_DIR/ekran_goruntuleri"; NOTLAR_DIR="$CASE_DIR/notlar"
@@ -79,8 +79,8 @@ kaydet() {
   [[ "$etiket" =~ ^[A-Za-z0-9._-]+$ ]] || hata "Geçersiz etiket: $etiket"
   local zaman gunluk ekran sonuc
   zaman="$(date -u +%Y%m%dT%H%M%S_%N)"
-  gunluk="$LOG_DIR/$zaman"_"$etiket".txt"
-  ekran="$EKRAN_DIR/$zaman"_"$etiket".png"
+  gunluk="${LOG_DIR}/${zaman}_${etiket}.txt"
+  ekran="${EKRAN_DIR}/${zaman}_${etiket}.png"
   sonuc=0
   {
     printf 'AŞAMA: %s\nUTC: %s\nSUNUCU: %s\nÖĞRENCİ: %s / %s\nKANIT: %s\nKOMUT:' \
