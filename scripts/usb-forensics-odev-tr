@@ -195,7 +195,7 @@ docker_araclarini_hazirla() {
     sudo docker info >/dev/null || hata "Docker başlatılamadı."
   fi
   bilgi "Araç imajı Dockerfile ile yeniden doğrulanıyor ve gerekirse önbellekten oluşturuluyor; USB verisine yazılmıyor."
-  sudo docker build -t "$ARAC_IMAJI" -f "$REPO_KOKU/Dockerfile" "$REPO_KOKU"
+  sudo docker build -t "$ARAC_IMAJI" -f "$REPO_KOKU/Dockerfile.assignment" "$REPO_KOKU"
   sudo docker image inspect "$ARAC_IMAJI" >/dev/null || hata "Araç imajı doğrulanamadı."
   sudo docker run --rm --network none "$ARAC_IMAJI" /bin/bash -lc \
     'dc3dd --version; mmls -V 2>&1 || true; fls -V 2>&1 || true; ffmpeg -version | head -n1; python3 -c "import docx, openpyxl, pptx; from PIL import Image; print(\"Office ve görüntü kitaplıkları hazır\")"'
