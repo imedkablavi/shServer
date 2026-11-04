@@ -13,6 +13,7 @@ ARAC_IMAJI="$(printenv TOOLS_IMAGE || printf 'usb-forensics-assignment-tr:local'
 REPO_KOKU="$PWD"
 
 AYGIT=""
+AYGIT_KIMLIK_DOGRULANDI=0
 BOLUM=""
 ETKIN_BAGLANTI=""
 BOLUM_BASLANGICI=""
@@ -115,10 +116,21 @@ onay_iste() {
 }
 
 temizlik() {
-  local rc=$?
+  local rc=$? mevcut="" seri=""
   trap - EXIT
-  if [[ -n "$ETKIN_BAGLANTI" ]] && mountpoint -q "$ETKIN_BAGLANTI"; then sudo umount "$ETKIN_BAGLANTI" >/dev/null 2>&1 || true; fi
-  if [[ -n "$AYGIT" && -b "$AYGIT" ]]; then sudo blockdev --setro "$AYGIT" >/dev/null 2>&1 || true; fi
+  if [[ -n "$ETKIN_BAGLANTI" ]] && mountpoint -q "$ETKIN_BAGLANTI"; then
+    sudo umount "$ETKIN_BAGLANTI" >/dev/null 2>&1 || true
+  fi
+  # Yalnızca daha önce doğrulanmış ve hâlâ aynı seri numarasıyla bağlı aygıtı salt okunur yap.
+  if [[ "$AYGIT_KIMLIK_DOGRULANDI" == "1" && -n "$AYGIT" && -b "$AYGIT" && -e "$AYGIT_BY_ID" ]]; then
+    mevcut="$(readlink -f "$AYGIT_BY_ID" 2>/dev/null || true)"
+    if [[ "$mevcut" == "$AYGIT" ]]; then
+      seri="$(sudo udevadm info --query=property --name="$AYGIT" 2>/dev/null | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1 || true)"
+      if [[ "$seri" == "$BEKLENEN_SERI" ]]; then
+        sudo blockdev --setro "$AYGIT" >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
   exit "$rc"
 }
 trap temizlik EXIT
@@ -137,6 +149,7 @@ usb_kimligini_bul() {
   [[ "$tur" == disk && "$tasima" == usb ]] || hata "Seçilen aygıt bütün USB diski değil."
   [[ "$AYGIT" != /dev/sda && "$AYGIT" != /dev/sdb ]] || hata "Korunan sunucu diski seçildi."
   [[ "$model" == *Flash* || "$model" == *FLASH* || "$model" == *Disk* ]] || hata "USB modeli beklenenden farklı: $model"
+  AYGIT_KIMLIK_DOGRULANDI=1
   printf 'USB yolu: %s\nModel: %s\nSeri: %s\nBoyut: %s\n' "$AYGIT" "$model" "$seri" "$(lsblk -dn -o SIZE "$AYGIT")"
 }
 
@@ -149,6 +162,7 @@ usb_kimligini_yeniden_dogrula() {
   tur="$(lsblk -dn -o TYPE "$AYGIT" | tr -d ' ')"
   tasima="$(lsblk -dn -o TRAN "$AYGIT" | tr -d ' ')"
   [[ "$seri" == "$BEKLENEN_SERI" && "$tur" == disk && "$tasima" == usb ]] || hata "USB kimliği doğrulaması başarısız; hiçbir yazma işlemi yapılmayacak."
+  AYGIT_KIMLIK_DOGRULANDI=1
   printf 'USB kimliği yeniden doğrulandı: %s / %s\n' "$AYGIT" "$seri"
 }
 
