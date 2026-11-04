@@ -6,6 +6,7 @@ Bu depo aynı USB bellek için iki ayrı laboratuvar iş akışı içerir. Aynı
 
 - Betik: scripts/usb-forensics
 - Varsayılan kanıt yolu: /srv/cs2ssd/usb-forensics/case-001
+- Dockerfile: Dockerfile
 - Docker imajı: usb-forensics-tools:local
 - Eski deney içindir; yeni üniversite ödevinin dört aşamasını temsil etmez.
 - Eski deneyin kayıtları ve imajları korunmalıdır. Yeni ödev betiği bu klasöre yazmaz.
@@ -17,6 +18,7 @@ Bu depo aynı USB bellek için iki ayrı laboratuvar iş akışı içerir. Aynı
 - Betik: scripts/usb-forensics-odev-tr
 - Veri üreticisi: scripts/olustur-test-verileri.py
 - Kanıt yolu: /srv/cs2ssd/usb-forensics/<ÖĞRENCİ_NO>_<AD>_USB_Odevi_<UTC_ZAMANI>/
+- Dockerfile: Dockerfile.assignment
 - Docker imajı: usb-forensics-assignment-tr:local
 - İmajlar:
   - imajlar/imaj-1-orijinal.img
@@ -26,7 +28,7 @@ Bu depo aynı USB bellek için iki ayrı laboratuvar iş akışı içerir. Aynı
 
 Yeni betik önce Türkçe Office Open XML belgeleri, PNG/JPG görüntüleri, WAV ses, MP4 video ve C++/Python örnek dosyaları üretir. Sonra imaj-1, Delete sonrası imaj-2, FAT32 format sonrası imaj-3 ve mantıksal sıfır yazma sonrası imaj-4 aşamalarını uygular.
 
-Yeni deney Docker imajını usb-forensics-assignment-tr:local etiketiyle oluşturur; eski usb-forensics-tools:local etiketini kullanmaz. Dosya üreticisi yalnızca yeni iş akışı tarafından çağrılır.
+Yeni deney Dockerfile.assignment dosyasını ve usb-forensics-assignment-tr:local etiketini kullanır; eski Dockerfile ve usb-forensics-tools:local imajına dokunmaz. Dosya üreticisi yalnızca yeni iş akışı tarafından çağrılır.
 
 ## 3. Güvenli doğrulama
 
@@ -39,7 +41,7 @@ python3 -m py_compile scripts/olustur-test-verileri.py
 bash tests/shellcheck-guardrails.sh
 ```
 
-Yeni Docker imajını yalnızca make build-assignment oluşturur. Eski araç imajını make build-legacy oluşturur. Her iki imajın etiketleri ayrıdır.
+Yeni Docker imajını yalnızca make build-assignment oluşturur. Eski araç imajını make build-legacy oluşturur. Her iki iş akışının betiği, kanıt dizini, Dockerfile, Docker imaj etiketi ve Make hedefi ayrıdır.
 
 ## 4. Önemli
 
