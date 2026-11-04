@@ -14,4 +14,4 @@ build-legacy:
 	docker build -t usb-forensics-tools:local .
 
 build-assignment:
-	docker build -t usb-forensics-assignment-tr:local .
+	docker build -t usb-forensics-assignment-tr:local -f Dockerfile.assignment .
