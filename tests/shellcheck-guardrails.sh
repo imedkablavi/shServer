@@ -31,6 +31,11 @@ grep -q 'S20_WIPE_OPERATION' "$SCRIPT"
 grep -q 'TERM_SHOT' "$SCRIPT"
 grep -q 'HAZIRLA-' "$ODEV_SCRIPT"
 grep -q 'GUVENLI-SIL-' "$ODEV_SCRIPT"
+mapfile -t fat_labels < <(grep -oE 'mkfs\\.vfat -F 32 -n [A-Z0-9_]+' "$ODEV_SCRIPT" | awk '{print $5}')
+[[ "${#fat_labels[@]}" -eq 2 ]] || { echo "Expected exactly two FAT32 volume labels." >&2; exit 1; }
+for label in "${fat_labels[@]}"; do
+  [[ "${#label}" -le 11 ]] || { echo "FAT32 volume label exceeds 11 characters: $label" >&2; exit 1; }
+done
 grep -q 'imaj-1-orijinal' "$ODEV_SCRIPT"
 grep -q 'imaj-2-silme-sonrasi' "$ODEV_SCRIPT"
 grep -q 'imaj-3-format-sonrasi' "$ODEV_SCRIPT"
