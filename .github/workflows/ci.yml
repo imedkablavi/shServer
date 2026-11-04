@@ -11,20 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Bash syntax
+      - name: Bash and Python syntax
         run: |
           bash -n scripts/usb-forensics
+          bash -n scripts/usb-forensics-odev-tr
           bash -n scripts/check-syntax.sh
           bash -n tests/shellcheck-guardrails.sh
+          python3 -m py_compile scripts/olustur-test-verileri.py
       - name: Non-destructive guardrails
         run: bash tests/shellcheck-guardrails.sh
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: ShellCheck
-        run: shellcheck -S warning scripts/usb-forensics scripts/check-syntax.sh tests/shellcheck-guardrails.sh
-      - name: Build tools image
+        run: shellcheck -S warning scripts/usb-forensics scripts/usb-forensics-odev-tr scripts/check-syntax.sh tests/shellcheck-guardrails.sh
+      - name: Build forensic tools image
         run: docker build --pull -t usb-forensics-tools:ci .
-      - name: Smoke-test container command execution
+      - name: Smoke-test forensic tools
         run: |
           docker run --rm --network none usb-forensics-tools:ci dc3dd --version
-          docker run --rm --network none usb-forensics-tools:ci /bin/bash -lc 'command -v mmls && command -v fls && command -v tsk_recover'
+          docker run --rm --network none usb-forensics-tools:ci /bin/bash -lc 'command -v mmls && command -v fls && command -v tsk_recover && ffmpeg -version | head -n1'
+          rm -rf "$RUNNER_TEMP/forensic-fixture"
+          docker run --rm --network none \
+            -v "$PWD/scripts/olustur-test-verileri.py:/work/olustur-test-verileri.py:ro" \
+            -v "$RUNNER_TEMP:/out:rw" \
+            usb-forensics-tools:ci \
+            python3 -B /work/olustur-test-verileri.py /out/forensic-fixture
+          docker run --rm --network none -v "$RUNNER_TEMP:/out:ro" usb-forensics-tools:ci \
+            python3 -c 'import pathlib, zipfile; root=pathlib.Path("/out/forensic-fixture"); office=root/"OFIS_BELGELERI"; names=["ornek-rapor.docx","ornek-veri.xlsx","ornek-sunum.pptx"]; [(lambda z: (z.testzip() is None) or (_ for _ in ()).throw(SystemExit("Bozuk OOXML: "+str(z.filename))))(zipfile.ZipFile(office/n)) for n in names]; required=["MULTIMEDYA/ornek-gorsel.png","MULTIMEDYA/ornek-fotograf.jpg","MULTIMEDYA/ornek-ses.wav","MULTIMEDYA/ornek-video.mp4","UYGULAMA_DOSYALARI/ornek-program.cpp","UYGULAMA_DOSYALARI/ornek-script.py"]; [(_ for _ in ()).throw(SystemExit("Eksik dosya: "+n)) for n in required if not (root/n).is_file()]; print("Türkçe Office ve çoklu ortam test dosyaları doğrulandı.")'
+          docker run --rm --network none -v "$RUNNER_TEMP:/out:ro" usb-forensics-tools:ci \
+            ffprobe -v error -show_entries format=format_name -of default=noprint_wrappers=1 /out/forensic-fixture/MULTIMEDYA/ornek-video.mp4
