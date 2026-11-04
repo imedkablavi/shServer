@@ -39,6 +39,12 @@ for path in "$IMAGE_DIR" "$HASH_DIR" "$LOG_DIR" "$SHOT_DIR" "$NOTES_DIR" "$ANALY
   mkdir -p "$path"
 done
 
+# Shared lock: prevents legacy and assignment workflows from accessing one USB simultaneously.
+DEVICE_LOCK_DIR="$BASE_MOUNT/usb-forensics/.locks"
+mkdir -p "$DEVICE_LOCK_DIR"
+exec 8>"$DEVICE_LOCK_DIR/usb-$EXPECTED_SERIAL.lock"
+flock -n 8 || die "USB $EXPECTED_SERIAL is already reserved by another forensic workflow."
+
 RUN_ID="$(date -u +%Y%m%dT%H%M%S%N)"
 RUN_DIR="$CASE_DIR/runs/$RUN_ID"
 mkdir -p "$RUN_DIR"
