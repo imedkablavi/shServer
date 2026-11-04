@@ -190,3 +190,11 @@ bash shadow-nexus/scripts/kestrel-v2-cihaz-kamera-fotograflarini-al
 ```
 
 Betik dosyaları listeler, yalnızca seçtiğiniz fotoğrafları kopyalar, telefon kaynağını silmez ve SHA-256/boyut eşleşmesini doğrular. Orijinal fotoğraflar `03_CIHAZ_KAMERA_CEKIMLERI` içinde saklanır; dış kaynaklı Commons fotoğraflarıyla karıştırılmaz.
+
+
+### Nihai rapor yapısı ve kanıt planı
+
+Samsung J7 örnek PDF raporunun bölüm sırası incelenerek Kestrel V2'ye özel nihai rapor planı hazırlanmıştır:
+- [Rapor yapısı, kanıt planı ve referans raporun uyarlama notları](scenarios/operation-kestrel-v2/RAPOR_YAPISI_VE_KANIT_PLANI_V2_TR.md)
+
+Bu belge referans rapordaki olay/cihaz fotoğrafları, teslim, Oxygen Android Agent, import/hash/zaman dilimi, Pre-Root, Root, Post-Root ve karşılaştırma bölümlerini Kestrel'e uyarlar. Samsung J7'ye özgü Odin/CF-Auto-Root/SuperSU adımlarının Redmi Note 13 Pro'da kullanılmaması gerektiğini açıklar. Ayrıca Android Agent ediniminin otomatik olarak fiziksel imaj sayılmaması ve bulut Access Token bilgilerinin gizli tutulması gerektiğini belirtir.
