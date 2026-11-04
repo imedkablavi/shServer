@@ -1,0 +1,397 @@
+#!/usr/bin/env bash
+# Türkçe dört aşamalı flaş bellek adli bilişim ödevi.
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+SURUM="2.0.0"
+TABAN_MOUNT="/srv/cs2ssd"
+KANIT_KOKU="$TABAN_MOUNT/usb-forensics"
+BEKLENEN_SERI="$(printenv EXPECTED_SERIAL || printf '54BIZH6NCUSC1HIE')"
+AYGIT_BY_ID="$(printenv DEVICE_BY_ID || printf '/dev/disk/by-id/usb-Generic_Flash_Disk_%s-0:0' "$BEKLENEN_SERI")"
+ARAC_IMAJI="$(printenv TOOLS_IMAGE || printf 'usb-forensics-assignment-tr:local')"
+REPO_KOKU="$PWD"
+
+AYGIT=""
+BOLUM=""
+ETKIN_BAGLANTI=""
+BOLUM_BASLANGICI=""
+ILK_OFSET=""
+IKINCI_OFSET=""
+UCUNCU_OFSET=""
+BASLANGIC_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+TERM_SHOT=""
+RUN_ID=""
+RUN_DIR=""
+CASE_DIR=""
+IMAJ_DIR=""
+HASH_DIR=""
+LOG_DIR=""
+EKRAN_DIR=""
+NOTLAR_DIR=""
+ANALIZ_DIR=""
+RAPOR_DIR=""
+OGRENCI_NO=""
+OGRENCI_ADI=""
+
+hata() { printf 'HATA: %s\n' "$*" >&2; exit 1; }
+bilgi() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+
+[[ "$(id -u)" -ne 0 ]] || hata "Betik normal kullanıcıyla çalıştırılmalıdır."
+[[ -f "$REPO_KOKU/Dockerfile" && -f "$REPO_KOKU/scripts/olustur-test-verileri.py" ]] || hata "Betik depo kökünden çalıştırılmalıdır."
+for c in sudo docker lsblk findmnt mountpoint readlink sha256sum flock python3 parted mkfs.vfat partprobe wipefs blockdev udevadm mount umount sync; do
+  command -v "$c" >/dev/null 2>&1 || hata "Gerekli komut bulunamadı: $c"
+done
+command -v termshot >/dev/null 2>&1 && TERM_SHOT="$(command -v termshot)"
+if [[ -z "$TERM_SHOT" && -x "$HOME/.local/bin/termshot" ]]; then TERM_SHOT="$HOME/.local/bin/termshot"; fi
+[[ -n "$TERM_SHOT" ]] || hata "termshot bulunamadı."
+mountpoint -q "$TABAN_MOUNT" || hata "$TABAN_MOUNT bağlı değil."
+
+printf '\n=== FLAŞ BELLEK ADLİ BİLİŞİM ÖDEVİ / SÜRÜM %s ===\n' "$SURUM"
+printf 'USB üzerindeki mevcut veriler silinecek ve dört imaj alınacaktır.\n'
+printf 'Önceki case-001 klasörü korunacaktır.\n'
+read -r -p "Öğrenci numaranız: " OGRENCI_NO
+[[ "$OGRENCI_NO" =~ ^[[:alnum:]_-]{2,24}$ ]] || hata "Öğrenci numarası geçersiz."
+read -r -p "Adınız ve soyadınız: " OGRENCI_ADI
+OGRENCI_ADI="$(printf '%s' "$OGRENCI_ADI" | sed -E 's/[[:space:]]+/_/g')"
+[[ "$OGRENCI_ADI" =~ ^[[:alnum:]_-]{2,48}$ ]] || hata "Ad alanı geçersiz; boşluklar alt çizgiye çevrilir."
+
+mkdir -p "$KANIT_KOKU"
+CASE_DIR="$KANIT_KOKU/$OGRENCI_NO"_"$OGRENCI_ADI"_USB_Odevi_$(date -u +%Y%m%dT%H%M%S)
+[[ ! -e "$CASE_DIR" ]] || hata "Kanıt klasörü zaten var; üzerine yazılmayacak: $CASE_DIR"
+IMAJ_DIR="$CASE_DIR/imajlar"; HASH_DIR="$CASE_DIR/hashler"; LOG_DIR="$CASE_DIR/gunlukler"
+EKRAN_DIR="$CASE_DIR/ekran_goruntuleri"; NOTLAR_DIR="$CASE_DIR/notlar"
+ANALIZ_DIR="$CASE_DIR/analiz"; RAPOR_DIR="$CASE_DIR/rapor"
+for p in "$IMAJ_DIR" "$HASH_DIR" "$LOG_DIR" "$EKRAN_DIR" "$NOTLAR_DIR" "$ANALIZ_DIR" "$RAPOR_DIR"; do mkdir -p "$p"; done
+KAYNAK_MOUNT="$(findmnt -n -o SOURCE --target "$TABAN_MOUNT")"
+KAYNAK_DOSYA="$(findmnt -n -o SOURCE --target "$CASE_DIR")"
+[[ -n "$KAYNAK_MOUNT" && "$KAYNAK_DOSYA" == "$KAYNAK_MOUNT" ]] || hata "Kanıt klasörü /srv/cs2ssd üzerinde değil."
+
+RUN_ID="$(date -u +%Y%m%dT%H%M%S%N)"
+RUN_DIR="$CASE_DIR/calistirma/$RUN_ID"
+mkdir -p "$RUN_DIR"
+exec 9>"$RUN_DIR/is-akisi.lock"
+flock -n 9 || hata "Başka bir iş akışı çalışıyor."
+exec > >(tee -a "$RUN_DIR/konsol-gunlugu.txt") 2>&1
+
+kaydet() {
+  local etiket="$1"; shift
+  [[ "$etiket" =~ ^[A-Za-z0-9._-]+$ ]] || hata "Geçersiz etiket: $etiket"
+  local zaman gunluk ekran sonuc
+  zaman="$(date -u +%Y%m%dT%H%M%S_%N)"
+  gunluk="$LOG_DIR/$zaman"_"$etiket".txt"
+  ekran="$EKRAN_DIR/$zaman"_"$etiket".png"
+  sonuc=0
+  {
+    printf 'AŞAMA: %s\nUTC: %s\nSUNUCU: %s\nÖĞRENCİ: %s / %s\nKANIT: %s\nKOMUT:' \
+      "$etiket" "$(date -u --iso-8601=seconds)" "$(hostname)" "$OGRENCI_NO" "$OGRENCI_ADI" "$CASE_DIR"
+    printf ' %q' "$@"; printf '\n\n--- KOMUT ÇIKTISI ---\n'
+  } | tee "$gunluk"
+  if declare -F -- "$1" >/dev/null 2>&1; then
+    local fd pid
+    exec {fd}> >(tee -a "$gunluk")
+    pid=$!
+    if "$@" >&"$fd" 2>&1; then sonuc=0; else sonuc=$?; fi
+    exec {fd}>&-
+    wait "$pid" || true
+  else
+    if "$@" 2>&1 | tee -a "$gunluk"; then sonuc=0; else sonuc=$?; fi
+  fi
+  printf '\n--- AŞAMA SONU ---\nÇIKIŞ KODU: %s\nBİTİŞ UTC: %s\n' "$sonuc" "$(date -u --iso-8601=seconds)" | tee -a "$gunluk"
+  if "$TERM_SHOT" --raw-read "$gunluk" --filename "$ekran" --columns 120; then
+    [[ -s "$ekran" ]] && sha256sum "$ekran" > "$HASH_DIR/$(basename "$ekran").sha256"
+  else
+    bilgi "UYARI: PNG oluşturulamadı; metin günlüğü saklandı."
+  fi
+  sha256sum "$gunluk" > "$HASH_DIR/$(basename "$gunluk").sha256"
+  [[ "$sonuc" -eq 0 ]] || hata "$etiket başarısız oldu. Günlük: $gunluk"
+}
+
+onay_iste() {
+  local aciklama="$1" beklenen="$2" yanit
+  printf '\n%s\nDevam etmek için aynen yazın: %s\n> ' "$aciklama" "$beklenen"
+  IFS= read -r yanit || hata "Onay alınamadı."
+  [[ "$yanit" == "$beklenen" ]] || hata "Onay yanlış; işlem durduruldu."
+}
+
+temizlik() {
+  local rc=$?
+  trap - EXIT
+  if [[ -n "$ETKIN_BAGLANTI" ]] && mountpoint -q "$ETKIN_BAGLANTI"; then sudo umount "$ETKIN_BAGLANTI" >/dev/null 2>&1 || true; fi
+  if [[ -n "$AYGIT" && -b "$AYGIT" ]]; then sudo blockdev --setro "$AYGIT" >/dev/null 2>&1 || true; fi
+  exit "$rc"
+}
+trap temizlik EXIT
+
+usb_kimligini_bul() {
+  [[ -e "$AYGIT_BY_ID" ]] || hata "Beklenen USB kimliği bulunamadı: $AYGIT_BY_ID"
+  AYGIT="$(readlink -f "$AYGIT_BY_ID")"
+  [[ -b "$AYGIT" ]] || hata "USB yolu blok aygıtı değil."
+  local prop seri model tur tasima
+  prop="$(sudo udevadm info --query=property --name="$AYGIT")"
+  seri="$(sed -n 's/^ID_SERIAL_SHORT=//p' <<< "$prop" | head -n1)"
+  model="$(sed -n 's/^ID_MODEL=//p' <<< "$prop" | head -n1)"
+  tur="$(lsblk -dn -o TYPE "$AYGIT" | tr -d ' ')"
+  tasima="$(lsblk -dn -o TRAN "$AYGIT" | tr -d ' ')"
+  [[ "$seri" == "$BEKLENEN_SERI" ]] || hata "USB seri numarası uyuşmuyor: $seri"
+  [[ "$tur" == disk && "$tasima" == usb ]] || hata "Seçilen aygıt bütün USB diski değil."
+  [[ "$AYGIT" != /dev/sda && "$AYGIT" != /dev/sdb ]] || hata "Korunan sunucu diski seçildi."
+  [[ "$model" == *Flash* || "$model" == *FLASH* || "$model" == *Disk* ]] || hata "USB modeli beklenenden farklı: $model"
+  printf 'USB yolu: %s\nModel: %s\nSeri: %s\nBoyut: %s\n' "$AYGIT" "$model" "$seri" "$(lsblk -dn -o SIZE "$AYGIT")"
+}
+
+bagli_bolum_kontrol() {
+  local mounts
+  mounts="$(lsblk -nrpo MOUNTPOINT "$AYGIT" | sed '/^$/d' || true)"
+  [[ -z "$mounts" ]] || hata "USB üzerinde bağlı bölüm var; otomatik ayırma yapılmayacak: $mounts"
+}
+
+depolama_kontrol() {
+  local bos aygit gerekli
+  bos="$(df -B1 --output=avail "$TABAN_MOUNT" | tail -n1 | tr -d ' ')"
+  aygit="$(sudo blockdev --getsize64 "$AYGIT")"
+  gerekli=$((aygit * 4 + aygit / 2 + 1073741824))
+  printf 'Boş alan: %s bayt / Gereken yaklaşık alan: %s bayt\n' "$bos" "$gerekli"
+  (( bos >= gerekli )) || hata "Dört imaj için yeterli alan yok."
+}
+
+docker_araclarini_hazirla() {
+  if ! sudo docker info >/dev/null 2>&1; then
+    bilgi "Docker kapalı. Başlatmak otomatik başlatma politikasına sahip diğer kapsayıcıları da çalıştırabilir."
+    onay_iste "Docker hizmeti başlatılsın mı?" "DOCKER-BASLAT"
+    sudo systemctl start docker
+    sudo docker info >/dev/null || hata "Docker başlatılamadı."
+  fi
+  if ! sudo docker image inspect "$ARAC_IMAJI" >/dev/null 2>&1; then
+    bilgi "Adli bilişim araç imajı oluşturuluyor; USB verisine yazılmıyor."
+    sudo docker build -t "$ARAC_IMAJI" -f "$REPO_KOKU/Dockerfile" "$REPO_KOKU"
+  fi
+  sudo docker image inspect "$ARAC_IMAJI" >/dev/null || hata "Araç imajı doğrulanamadı."
+  sudo docker run --rm --network none "$ARAC_IMAJI" /bin/bash -lc \
+    'dc3dd --version; mmls -V 2>&1 || true; fls -V 2>&1 || true; ffmpeg -version | head -n1; python3 -c "import docx, openpyxl, pptx; from PIL import Image; print(\"Office ve görüntü kitaplıkları hazır\")"'
+}
+
+arac_kabugu() {
+  sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --security-opt no-new-privileges \
+    --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m -v "$CASE_DIR:/case:ro" \
+    "$ARAC_IMAJI" /bin/bash "$@"
+}
+
+imaj_al() {
+  local ad="$1" etiket="$2" cikti="$IMAJ_DIR/$1.img" dc_log="$LOG_DIR/$1.dc3dd.log" disk_gid
+  [[ ! -e "$cikti" && ! -e "$dc_log" && ! -e "$HASH_DIR/$1.sha256" ]] || hata "$ad için mevcut kanıt var; üzerine yazılmayacak."
+  bagli_bolum_kontrol
+  disk_gid="$(getent group disk | cut -d: -f3)"
+  [[ "$disk_gid" =~ ^[0-9]+$ ]] || hata "disk grup kimliği bulunamadı."
+  kaydet "$etiket"_YAZMAYA_KAPAT sudo blockdev --setro "$AYGIT"
+  [[ "$(sudo blockdev --getro "$AYGIT")" == 1 ]] || hata "USB salt okunur yapılamadı."
+  bilgi "$ad imajı alınıyor; bitmeden sonraki aşamaya geçilmeyecek."
+  kaydet "$etiket" sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --group-add "$disk_gid" \
+    --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --device="$AYGIT:/dev/delil:r" -v "$IMAJ_DIR:/delil/imajlar:rw" -v "$LOG_DIR:/delil/gunlukler:rw" \
+    "$ARAC_IMAJI" dc3dd if=/dev/delil hof="/delil/imajlar/$1.img" hash=sha256 rec=off log="/delil/gunlukler/$1.dc3dd.log"
+  [[ -s "$cikti" && -s "$dc_log" ]] || hata "$ad imajı veya günlüğü eksik."
+  kaydet "$etiket"_SHA256 bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$cikti" "$HASH_DIR/$1.sha256"
+  kaydet "$etiket"_HASH_DOGRULA sha256sum -c "$HASH_DIR/$1.sha256"
+  kaydet "$etiket"_GUNLUK_HASH bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$dc_log" "$HASH_DIR/$1.dc3dd.log.sha256"
+}
+
+bolum_ofseti_bul() {
+  local imaj="$1" sonuc
+  sonuc="$(arac_kabugu -lc "mmls /case/imajlar/$imaj")"
+  BOLUM_BASLANGICI="$(awk '$1 ~ /^[0-9]+:$/ && $2 ~ /^[0-9]+:[0-9]+$/ && $3 ~ /^[0-9]+$/ {print $3; exit}' <<< "$sonuc")"
+  [[ "$BOLUM_BASLANGICI" =~ ^[0-9]+$ ]] || hata "$imaj için bölüm başlangıcı bulunamadı."
+  printf '%s bölüm başlangıç sektörü: %s\n' "$imaj" "$BOLUM_BASLANGICI"
+}
+
+analiz_listesi() {
+  local tur="$1" imaj="$2" ofset="$3" hedef="$4"
+  case "$tur" in
+    tum) arac_kabugu -lc "fls -r -o $ofset /case/imajlar/$imaj" | tee "$hedef" ;;
+    silinen) arac_kabugu -lc "fls -r -d -o $ofset /case/imajlar/$imaj" | tee "$hedef" ;;
+    *) hata "Bilinmeyen analiz türü: $tur" ;;
+  esac
+}
+
+sil_secili_dosyalar() {
+  local kok="$1/FORENSIK_TEST_DOSYALARI"
+  printf 'Normal dosya silme komutuyla silinecek örnek dosyalar:\n'
+  for goreli in "OFIS_BELGELERI/ornek-rapor.docx" "OFIS_BELGELERI/ornek-sunum.pptx" \
+    "MULTIMEDYA/ornek-gorsel.png" "MULTIMEDYA/ornek-ses.wav" "MULTIMEDYA/ornek-video.mp4" \
+    "UYGULAMA_DOSYALARI/ornek-program.cpp"; do
+    [[ -f "$kok/$goreli" ]] || hata "Silinecek dosya bulunamadı: $goreli"
+    printf '  %s\n' "$goreli"
+    rm -- "$kok/$goreli"
+  done
+  sync
+  printf '\nSilme sonrası kalan dosyalar:\n'
+  find "$kok" -type f -printf '%P | %s bayt\n' | sort
+}
+
+manifest_kontrolu() {
+  local kok="$1" hash yol mevcut=0 silinmis=0
+  while read -r hash yol; do
+    if [[ -f "$kok/$yol" ]]; then
+      printf '%s  %s\n' "$hash" "$kok/$yol" | sha256sum -c -
+      mevcut=$((mevcut + 1))
+    else
+      printf 'BEKLENEN SİLİNME: %s\n' "$yol"
+      silinmis=$((silinmis + 1))
+    fi
+  done < "$NOTLAR_DIR/orijinal-dosyalar.sha256"
+  printf 'Mevcut dosya: %s / Silinmiş dosya: %s\n' "$mevcut" "$silinmis"
+}
+
+guvenli_silme() {
+  local seri disk_gid silme_log
+  seri="$(sudo udevadm info --query=property --name="$AYGIT" | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1)"
+  [[ "$seri" == "$BEKLENEN_SERI" ]] || hata "Son silme öncesi USB seri numarası değişti."
+  disk_gid="$(getent group disk | cut -d: -f3)"
+  [[ "$disk_gid" =~ ^[0-9]+$ ]] || hata "disk grubu bulunamadı."
+  silme_log="$LOG_DIR/$RUN_ID"_guvenli_silme.dc3dd.log
+  onay_iste "SON YIKICI AŞAMA: $AYGIT üzerindeki tüm mantıksal sektörler sıfırlanacaktır." "GUVENLI-SIL-$BEKLENEN_SERI"
+  kaydet S20_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
+  [[ "$(sudo blockdev --getro "$AYGIT")" == 0 ]] || hata "USB yazılabilir duruma getirilemedi."
+  kaydet S21_GUVENLI_SILME sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --group-add "$disk_gid" \
+    --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --device="$AYGIT:/dev/delil:rw" -v "$LOG_DIR:/delil/gunlukler:rw" \
+    "$ARAC_IMAJI" dc3dd wipe=/dev/delil hash=sha256 log="/delil/gunlukler/$RUN_ID"_guvenli_silme.dc3dd.log
+  [[ -s "$silme_log" ]] || hata "Güvenli silme günlüğü bulunamadı."
+  kaydet S22_SILME_GUNLUGU_HASH bash -Eeuo pipefail -c 'sha256sum "$1" | tee "$2"' _ "$silme_log" "$HASH_DIR/$RUN_ID"_guvenli_silme.dc3dd.log.sha256
+  kaydet S23_SILME_SONRASI_ESITLE sudo sync
+  kaydet S24_USB_SALT_OKUNUR sudo blockdev --setro "$AYGIT"
+  [[ "$(sudo blockdev --getro "$AYGIT")" == 1 ]] || hata "USB salt okunur duruma alınamadı."
+}
+
+sifir_dogrula() {
+  local dosya="$IMAJ_DIR/imaj-4-guvenli-silme-sonrasi.img" boyut
+  [[ -s "$dosya" ]] || hata "Dördüncü imaj bulunamadı."
+  boyut="$(stat -c%s "$dosya")"
+  kaydet S30_SIFIR_IMAJ_KARSILASTIR cmp -n "$boyut" "$dosya" /dev/zero
+  printf 'BAŞARILI: %s baytlık imaj mantıksal olarak sıfırlardan oluşuyor.\n' "$boyut" > "$ANALIZ_DIR/imaj-4-sifir-dogrulama.txt"
+  printf 'Not: Bu kontrol fiziksel NAND hücrelerinin tamamının temizlendiğini kanıtlamaz.\n' >> "$ANALIZ_DIR/imaj-4-sifir-dogrulama.txt"
+  "$TERM_SHOT" --raw-read "$ANALIZ_DIR/imaj-4-sifir-dogrulama.txt" --filename "$EKRAN_DIR/imaj-4-sifir-dogrulama.png" --columns 120 || true
+  sha256sum "$ANALIZ_DIR/imaj-4-sifir-dogrulama.txt" > "$HASH_DIR/imaj-4-sifir-dogrulama.txt.sha256"
+}
+
+rapor_yaz() {
+  local rapor="$RAPOR_DIR/ON_RAPOR_TURKCE.md" ad boyut ozet
+  {
+    printf '# Flaş Bellek Adli Bilişim Deneyi - Ön Rapor\n\n'
+    printf -- '- Öğrenci numarası: %s\n- Öğrenci adı: %s\n- USB seri numarası: %s\n' "$OGRENCI_NO" "$OGRENCI_ADI" "$BEKLENEN_SERI"
+    printf -- '- Sunucu: %s\n- Betik sürümü: %s\n- Başlangıç UTC: %s\n- Bitiş UTC: %s\n\n' "$(hostname)" "$SURUM" "$BASLANGIC_UTC" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '## Deney aşamaları\n\n'
+    printf '1. USB üzerinde OFIS_BELGELERI, MULTIMEDYA ve UYGULAMA_DOSYALARI klasörleri oluşturuldu; DOCX, XLSX, PPTX, PNG, JPG, WAV, MP4, CPP ve PY dosyaları yerleştirildi.\n'
+    printf '2. İlk imaj dosyalar silinmeden önce alındı.\n3. Seçilen altı dosya normal dosya silme komutuyla silindi ve ikinci imaj alındı.\n'
+    printf '4. USB bölümü FAT32 olarak yeniden biçimlendirildi ve üçüncü imaj alındı.\n5. dc3dd ile tüm mantıksal aygıt alanına sıfır yazıldı ve dördüncü imaj alındı.\n\n'
+    printf '## İmajlar ve SHA-256\n\n'
+    for ad in imaj-1-orijinal imaj-2-silme-sonrasi imaj-3-format-sonrasi imaj-4-guvenli-silme-sonrasi; do
+      boyut="$(stat -c%s "$IMAJ_DIR/$ad.img")"
+      ozet="$(awk '{print $1}' "$HASH_DIR/$ad.sha256")"
+      printf -- '- %s.img — %s bayt — SHA-256 değeri: %s\n' "$ad" "$boyut" "$ozet"
+    done
+    printf '\n## Analiz çıktıları\n\nİlk dosya listesi: analiz/imaj-1-dosya-listesi.txt\n'
+    printf 'Silinmiş kayıtlar: analiz/imaj-2-silinmis-kayitlar.txt\nBiçimlendirme sonrası: analiz/imaj-3-format-sonrasi.txt\n'
+    printf 'Sıfır doğrulaması: analiz/imaj-4-sifir-dogrulama.txt\n'
+    printf '\n## Teknik sınırlamalar\n\n'
+    printf -- '- İlk imaj, deney için hazırlanmış sentetik örnek dosyaların bulunduğu özgün deney durumudur; gerçek kullanıcı verisi değildir.\n'
+    printf -- '- FAT32 hızlı biçimlendirme, güvenli silme ile aynı işlem değildir.\n'
+    printf -- '- Sıfır yazma mantıksal blok aygıtı alanını kapsar; fiziksel NAND hücrelerinin tümünün temizlendiğini kanıtlamaz.\n'
+    printf -- '- Sleuth Kit listeleri dosya sistemi kayıtlarını gösterir. Dosya içeriğinin kurtarıldığı iddiası Autopsy ile ayrıca doğrulanmalıdır.\n'
+    printf -- '- Autopsy incelemesi ve ekran görüntüleri öğrenci tarafından ayrıca eklenecektir.\n'
+  } > "$rapor"
+  sha256sum "$rapor" > "$HASH_DIR/ON_RAPOR_TURKCE.md.sha256"
+  "$TERM_SHOT" --raw-read "$rapor" --filename "$EKRAN_DIR/on-rapor-ozeti.png" --columns 120 || true
+}
+
+ana() {
+  local mount_dir veri_klasoru mount_sec
+  mount_dir="$RUN_DIR/usb-baglanti"
+  veri_klasoru="$mount_dir/FORENSIK_TEST_DOSYALARI"
+  mkdir -p "$mount_dir"
+  mount_sec="uid=$(id -u),gid=$(id -g),umask=022"
+
+  kaydet S00_SUNUCU_DURUMU bash -c 'date -u --iso-8601=seconds; hostname; uname -a; lsblk -e7 -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS; df -hT /srv/cs2ssd'
+  kaydet S01_USB_KIMLIK usb_kimligini_bul
+  kaydet S02_DEPOLAMA_KONTROL depolama_kontrol
+  bagli_bolum_kontrol
+  kaydet S03_ADLI_BILISIM_ARACLARI docker_araclarini_hazirla
+
+  onay_iste "HAZIRLIK: USB bölüm tablosu ve dosya sistemi yeniden oluşturulacak; mevcut veriler silinecek." "HAZIRLA-$BEKLENEN_SERI"
+  kaydet S04_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
+  kaydet S05_IMZALARI_TEMIZLE sudo wipefs --all "$AYGIT"
+  kaydet S06_BOLUM_TABLOSU sudo parted --script "$AYGIT" mklabel msdos
+  kaydet S07_BOLUM_OLUSTUR sudo parted --script "$AYGIT" mkpart primary fat32 1MiB 100%
+  kaydet S08_BOLUM_TABLOSUNU_YENILE sudo partprobe "$AYGIT"
+  kaydet S09_UDEV_BEKLE sudo udevadm settle
+  BOLUM="$(lsblk -nrpo NAME,TYPE "$AYGIT" | awk '$2=="part" {print $1; exit}')"
+  [[ -n "$BOLUM" && -b "$BOLUM" ]] || hata "USB bölümü bulunamadı."
+  kaydet S10_ILK_FAT32 sudo mkfs.vfat -F 32 -n ADLI_ORIJINAL "$BOLUM"
+  kaydet S11_ILK_DOSYA_SISTEMI_KONTROL lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$AYGIT"
+
+  kaydet S12_USB_BAGLA sudo mount -o "$mount_sec" "$BOLUM" "$mount_dir"
+  ETKIN_BAGLANTI="$mount_dir"
+  kaydet S13_TURKCE_TEST_VERISI_OLUSTUR sudo docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$(id -u):$(id -g)" --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,noexec,size=128m \
+    -v "$mount_dir:/usb:rw" -v "$REPO_KOKU/scripts/olustur-test-verileri.py:/work/olustur-test-verileri.py:ro" \
+    "$ARAC_IMAJI" python3 -B /work/olustur-test-verileri.py /usb/FORENSIK_TEST_DOSYALARI
+  kaydet S14_ORIJINAL_SHA256 bash -Eeuo pipefail -c 'cd "$1"; find . -type f -print0 | sort -z | xargs -0 sha256sum > "$2"; cat "$2"' _ "$veri_klasoru" "$NOTLAR_DIR/orijinal-dosyalar.sha256"
+  kaydet S15_ORIJINAL_ENVANTER find "$veri_klasoru" -type f -printf '%P | %s bayt\n'
+  kaydet S16_ESITLE sudo sync
+  kaydet S17_USB_AYIR sudo umount "$mount_dir"
+  ETKIN_BAGLANTI=""
+
+  bilgi "1. aşama: özgün sentetik dosyalar hazır; imaj-1 alınıyor."
+  imaj_al imaj-1-orijinal S18_IMAJ_1_ORIJINAL
+
+  kaydet S19_SILME_ICIN_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
+  kaydet S20_SILME_ICIN_BAGLA sudo mount -o "$mount_sec" "$BOLUM" "$mount_dir"
+  ETKIN_BAGLANTI="$mount_dir"
+  kaydet S21_SECILI_DOSYALARI_SIL sil_secili_dosyalar "$mount_dir"
+  kaydet S21B_ORIJINAL_MANIFEST_KONTROL manifest_kontrolu "$veri_klasoru"
+  kaydet S22_SILME_ESITLE sudo sync
+  kaydet S23_SILME_SONRASI_AYIR sudo umount "$mount_dir"
+  ETKIN_BAGLANTI=""
+  bilgi "2. aşama: seçilen dosyalar normal Delete işlemiyle silindi; imaj-2 alınıyor."
+  imaj_al imaj-2-silme-sonrasi S24_IMAJ_2_SILME_SONRASI
+
+  kaydet S25_FORMAT_ICIN_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
+  bagli_bolum_kontrol
+  kaydet S26_FAT32_FORMAT sudo mkfs.vfat -F 32 -n FORMAT_SONRASI "$BOLUM"
+  kaydet S27_FORMAT_UDEV sudo udevadm settle
+  kaydet S28_FORMAT_DURUM lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$AYGIT"
+  bilgi "3. aşama: USB yeniden biçimlendirildi; imaj-3 alınıyor."
+  imaj_al imaj-3-format-sonrasi S29_IMAJ_3_FORMAT_SONRASI
+
+  guvenli_silme
+  bilgi "Son silme tamamlandı; imaj-4 alınıyor."
+  imaj_al imaj-4-guvenli-silme-sonrasi S31_IMAJ_4_GUVENLI_SILME_SONRASI
+  sifir_dogrula
+
+  kaydet S32_IMAJ_1_BOLUM_TABLOSU arac_kabugu -lc 'mmls /case/imajlar/imaj-1-orijinal.img'
+  kaydet S33_IMAJ_2_BOLUM_TABLOSU arac_kabugu -lc 'mmls /case/imajlar/imaj-2-silme-sonrasi.img'
+  kaydet S34_IMAJ_3_BOLUM_TABLOSU arac_kabugu -lc 'mmls /case/imajlar/imaj-3-format-sonrasi.img'
+  kaydet S35_IMAJ_1_OFSET bolum_ofseti_bul imaj-1-orijinal.img
+  ILK_OFSET="$BOLUM_BASLANGICI"
+  kaydet S36_IMAJ_2_OFSET bolum_ofseti_bul imaj-2-silme-sonrasi.img
+  IKINCI_OFSET="$BOLUM_BASLANGICI"
+  kaydet S37_IMAJ_3_OFSET bolum_ofseti_bul imaj-3-format-sonrasi.img
+  UCUNCU_OFSET="$BOLUM_BASLANGICI"
+  printf 'imaj-1-orijinal=%s\nimaj-2-silme-sonrasi=%s\nimaj-3-format-sonrasi=%s\n' "$ILK_OFSET" "$IKINCI_OFSET" "$UCUNCU_OFSET" > "$NOTLAR_DIR/bolum-ofsetleri.txt"
+
+  kaydet S38_IMAJ_1_DOSYA_LISTESI analiz_listesi tum imaj-1-orijinal.img "$ILK_OFSET" "$ANALIZ_DIR/imaj-1-dosya-listesi.txt"
+  kaydet S39_IMAJ_2_SILINMIS_KAYITLAR analiz_listesi silinen imaj-2-silme-sonrasi.img "$IKINCI_OFSET" "$ANALIZ_DIR/imaj-2-silinmis-kayitlar.txt"
+  kaydet S40_IMAJ_3_FORMAT_SONRASI_LISTE analiz_listesi tum imaj-3-format-sonrasi.img "$UCUNCU_OFSET" "$ANALIZ_DIR/imaj-3-format-sonrasi.txt"
+
+  kaydet S41_TUM_IMAJ_HASHLERI bash -Eeuo pipefail -c 'cd "$1"; sha256sum imajlar/*.img > hashler/TUM_IMAJLAR.sha256; sha256sum -c hashler/TUM_IMAJLAR.sha256' _ "$CASE_DIR"
+  kaydet S42_ON_RAPOR rapor_yaz
+  kaydet S43_KANIT_ENVANTERI find "$CASE_DIR" -maxdepth 4 -type f -printf '%p | %s bayt\n'
+  bilgi "İş akışı tamamlandı. Dört imajın SHA-256 doğrulamaları ve Türkçe ön rapor oluşturuldu."
+  bilgi "Kanıt klasörü: $CASE_DIR"
+  bilgi "Autopsy dosya kurtarma incelemesi ayrıca belgelenmelidir."
+}
+
+ana "$@"
