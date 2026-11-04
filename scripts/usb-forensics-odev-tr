@@ -211,6 +211,15 @@ analiz_listesi() {
   case "$tur" in
     tum) arac_kabugu -lc "fls -r -o $ofset /case/imajlar/$imaj" | tee "$hedef" ;;
     silinen) arac_kabugu -lc "fls -r -d -o $ofset /case/imajlar/$imaj" | tee "$hedef" ;;
+    formatli)
+      local rc=0
+      arac_kabugu -lc "fls -r -o $ofset /case/imajlar/$imaj" > "$hedef" 2>&1 || rc=$?
+      cat "$hedef"
+      if [[ "$rc" -ne 0 ]]; then
+        printf 'UYARI: Biçimlendirme sonrası fls çıkış kodu %s verdi; günlük çıktı korunmuştur.\n' "$rc" | tee -a "$hedef"
+      fi
+      return 0
+      ;;
     *) hata "Bilinmeyen analiz türü: $tur" ;;
   esac
 }
@@ -234,7 +243,7 @@ manifest_kontrolu() {
   local kok="$1" hash yol mevcut=0 silinmis=0
   while IFS=' ' read -r hash yol; do
     if [[ -f "$kok/$yol" ]]; then
-      printf '%s  %s\n' "$hash" "$kok/$yol" | sha256sum -c -
+      if ! printf '%s  %s\n' "$hash" "$kok/$yol" | sha256sum -c -; then hata "Silinmemesi gereken dosyanın SHA-256 değeri değişti: $yol"; fi
       mevcut=$((mevcut + 1))
     else
       printf 'BEKLENEN SİLİNME: %s\n' "$yol"
@@ -242,6 +251,7 @@ manifest_kontrolu() {
     fi
   done < "$NOTLAR_DIR/orijinal-dosyalar.sha256"
   printf 'Mevcut dosya: %s / Silinmiş dosya: %s\n' "$mevcut" "$silinmis"
+  [[ "$mevcut" -eq 6 && "$silinmis" -eq 6 ]] || hata "Beklenen 6 kalan ve 6 silinen dosya sayısı doğrulanamadı."
 }
 
 guvenli_silme() {
@@ -384,7 +394,7 @@ ana() {
 
   kaydet S38_IMAJ_1_DOSYA_LISTESI analiz_listesi tum imaj-1-orijinal.img "$ILK_OFSET" "$ANALIZ_DIR/imaj-1-dosya-listesi.txt"
   kaydet S39_IMAJ_2_SILINMIS_KAYITLAR analiz_listesi silinen imaj-2-silme-sonrasi.img "$IKINCI_OFSET" "$ANALIZ_DIR/imaj-2-silinmis-kayitlar.txt"
-  kaydet S40_IMAJ_3_FORMAT_SONRASI_LISTE analiz_listesi tum imaj-3-format-sonrasi.img "$UCUNCU_OFSET" "$ANALIZ_DIR/imaj-3-format-sonrasi.txt"
+  kaydet S40_IMAJ_3_FORMAT_SONRASI_LISTE analiz_listesi formatli imaj-3-format-sonrasi.img "$UCUNCU_OFSET" "$ANALIZ_DIR/imaj-3-format-sonrasi.txt"
 
   kaydet S41_TUM_IMAJ_HASHLERI bash -Eeuo pipefail -c 'cd "$1"; sha256sum imajlar/*.img > hashler/TUM_IMAJLAR.sha256; sha256sum -c hashler/TUM_IMAJLAR.sha256' _ "$CASE_DIR"
   kaydet S42_ON_RAPOR rapor_yaz
