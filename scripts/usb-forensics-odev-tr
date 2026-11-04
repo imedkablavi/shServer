@@ -58,6 +58,12 @@ OGRENCI_ADI="$(printf '%s' "$OGRENCI_ADI" | sed -E 's/[[:space:]]+/_/g')"
 [[ "$OGRENCI_ADI" =~ ^[[:alnum:]_-]{2,48}$ ]] || hata "Ad alanı geçersiz; boşluklar alt çizgiye çevrilir."
 
 mkdir -p "$KANIT_KOKU"
+# Aynı USB seri numarası için eski ve yeni iş akışları arasında ortak kilit.
+DEVICE_LOCK_DIR="$KANIT_KOKU/.locks"
+mkdir -p "$DEVICE_LOCK_DIR"
+exec 8>"$DEVICE_LOCK_DIR/usb-$BEKLENEN_SERI.lock"
+flock -n 8 || hata "Bu USB başka bir adli bilişim iş akışı tarafından kullanılıyor."
+
 CASE_DIR="${KANIT_KOKU}/${OGRENCI_NO}_${OGRENCI_ADI}_USB_Odevi_$(date -u +%Y%m%dT%H%M%S)"
 [[ ! -e "$CASE_DIR" ]] || hata "Kanıt klasörü zaten var; üzerine yazılmayacak: $CASE_DIR"
 IMAJ_DIR="$CASE_DIR/imajlar"; HASH_DIR="$CASE_DIR/hashler"; LOG_DIR="$CASE_DIR/gunlukler"
