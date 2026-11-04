@@ -373,7 +373,7 @@ ana() {
   kaydet S09_UDEV_BEKLE sudo udevadm settle
   BOLUM="$(lsblk -nrpo NAME,TYPE "$AYGIT" | awk '$2=="part" {print $1; exit}')"
   [[ -n "$BOLUM" && -b "$BOLUM" ]] || hata "USB bölümü bulunamadı."
-  kaydet S10_ILK_FAT32 sudo mkfs.vfat -F 32 -n ADLI_ORIJINAL "$BOLUM"
+  kaydet S10_ILK_FAT32 sudo mkfs.vfat -F 32 -n ADLI_ORIJ "$BOLUM"
   kaydet S11_ILK_DOSYA_SISTEMI_KONTROL lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$AYGIT"
 
   kaydet S12_USB_BAGLA sudo mount -o "$mount_sec" "$BOLUM" "$mount_dir"
@@ -406,7 +406,7 @@ ana() {
   bagli_bolum_kontrol
   kaydet S25_FORMAT_ICIN_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
   bagli_bolum_kontrol
-  kaydet S26_FAT32_FORMAT sudo mkfs.vfat -F 32 -n FORMAT_SONRASI "$BOLUM"
+  kaydet S26_FAT32_FORMAT sudo mkfs.vfat -F 32 -n FORMAT_SONR "$BOLUM"
   kaydet S27_FORMAT_UDEV sudo udevadm settle
   kaydet S28_FORMAT_DURUM lsblk -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS "$AYGIT"
   bilgi "3. aşama: USB yeniden biçimlendirildi; imaj-3 alınıyor."
