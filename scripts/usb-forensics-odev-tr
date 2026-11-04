@@ -140,6 +140,18 @@ usb_kimligini_bul() {
   printf 'USB yolu: %s\nModel: %s\nSeri: %s\nBoyut: %s\n' "$AYGIT" "$model" "$seri" "$(lsblk -dn -o SIZE "$AYGIT")"
 }
 
+usb_kimligini_yeniden_dogrula() {
+  [[ -e "$AYGIT_BY_ID" ]] || hata "USB by-id yolu kayboldu: $AYGIT_BY_ID"
+  local mevcut seri tasima tur
+  mevcut="$(readlink -f "$AYGIT_BY_ID")"
+  [[ "$mevcut" == "$AYGIT" ]] || hata "USB aygıt yolu değişti: ilk=$AYGIT / şimdi=$mevcut"
+  seri="$(sudo udevadm info --query=property --name="$AYGIT" | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1)"
+  tur="$(lsblk -dn -o TYPE "$AYGIT" | tr -d ' ')"
+  tasima="$(lsblk -dn -o TRAN "$AYGIT" | tr -d ' ')"
+  [[ "$seri" == "$BEKLENEN_SERI" && "$tur" == disk && "$tasima" == usb ]] || hata "USB kimliği doğrulaması başarısız; hiçbir yazma işlemi yapılmayacak."
+  printf 'USB kimliği yeniden doğrulandı: %s / %s\n' "$AYGIT" "$seri"
+}
+
 bagli_bolum_kontrol() {
   local mounts
   mounts="$(lsblk -nrpo MOUNTPOINT "$AYGIT" | sed '/^$/d' || true)"
@@ -256,12 +268,14 @@ manifest_kontrolu() {
 
 guvenli_silme() {
   local seri disk_gid silme_log
+  usb_kimligini_yeniden_dogrula
   seri="$(sudo udevadm info --query=property --name="$AYGIT" | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1)"
   [[ "$seri" == "$BEKLENEN_SERI" ]] || hata "Son silme öncesi USB seri numarası değişti."
   disk_gid="$(getent group disk | cut -d: -f3)"
   [[ "$disk_gid" =~ ^[0-9]+$ ]] || hata "disk grubu bulunamadı."
   silme_log="$LOG_DIR/$RUN_ID"_guvenli_silme.dc3dd.log
   onay_iste "SON YIKICI AŞAMA: $AYGIT üzerindeki tüm mantıksal sektörler sıfırlanacaktır." "GUVENLI-SIL-$BEKLENEN_SERI"
+  usb_kimligini_yeniden_dogrula
   kaydet S20_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
   [[ "$(sudo blockdev --getro "$AYGIT")" == 0 ]] || hata "USB yazılabilir duruma getirilemedi."
   kaydet S21_GUVENLI_SILME sudo docker run --rm --network none --read-only --cap-drop ALL \
@@ -330,7 +344,9 @@ ana() {
   bagli_bolum_kontrol
   kaydet S03_ADLI_BILISIM_ARACLARI docker_araclarini_hazirla
 
+  kaydet S03B_USB_KIMLIGINI_YENIDEN_DOGRULA usb_kimligini_yeniden_dogrula
   onay_iste "HAZIRLIK: USB bölüm tablosu ve dosya sistemi yeniden oluşturulacak; mevcut veriler silinecek." "HAZIRLA-$BEKLENEN_SERI"
+  kaydet S03C_ONAY_SONRASI_USB_KIMLIGI usb_kimligini_yeniden_dogrula
   kaydet S04_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
   kaydet S05_IMZALARI_TEMIZLE sudo wipefs --all "$AYGIT"
   kaydet S06_BOLUM_TABLOSU sudo parted --script "$AYGIT" mklabel msdos
@@ -368,6 +384,8 @@ ana() {
   bilgi "2. aşama: seçilen dosyalar normal Delete işlemiyle silindi; imaj-2 alınıyor."
   imaj_al imaj-2-silme-sonrasi S24_IMAJ_2_SILME_SONRASI
 
+  kaydet S25_FORMAT_ONCESI_USB_KIMLIGI usb_kimligini_yeniden_dogrula
+  bagli_bolum_kontrol
   kaydet S25_FORMAT_ICIN_YAZMAYI_AC sudo blockdev --setrw "$AYGIT"
   bagli_bolum_kontrol
   kaydet S26_FAT32_FORMAT sudo mkfs.vfat -F 32 -n FORMAT_SONRASI "$BOLUM"
