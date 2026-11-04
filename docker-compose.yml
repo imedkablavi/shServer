@@ -1,3 +1,5 @@
+# Legacy case-001 tooling only.
+# The assignment workflow uses usb-forensics-assignment-tr:local directly.
 services:
   forensic-tools:
     build:
