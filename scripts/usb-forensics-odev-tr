@@ -232,7 +232,7 @@ sil_secili_dosyalar() {
 
 manifest_kontrolu() {
   local kok="$1" hash yol mevcut=0 silinmis=0
-  while read -r hash yol; do
+  while IFS=' ' read -r hash yol; do
     if [[ -f "$kok/$yol" ]]; then
       printf '%s  %s\n' "$hash" "$kok/$yol" | sha256sum -c -
       mevcut=$((mevcut + 1))
